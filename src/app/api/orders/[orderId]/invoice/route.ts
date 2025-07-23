@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
     const session = await auth()
@@ -16,7 +16,7 @@ export async function GET(
       )
     }
     
-    const { orderId } = params
+    const { orderId } = await params
     
     // Fetch order with all details
     const order = await prisma.order.findFirst({

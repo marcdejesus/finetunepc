@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
     const session = await auth()
@@ -16,7 +16,7 @@ export async function GET(
       )
     }
     
-    const { orderId } = params
+    const { orderId } = await params
     
     const order = await prisma.order.findFirst({
       where: {
@@ -66,7 +66,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
     const session = await auth()
@@ -78,7 +78,7 @@ export async function PUT(
       )
     }
     
-    const { orderId } = params
+    const { orderId } = await params
     const { status, trackingNumber, adminNotes } = await request.json()
     
     // Check if user is admin or if it's their order
