@@ -44,5 +44,8 @@ next-env.d.ts
 # ide
 .cursorrules
 
+# dev notes
+/notes/
+
 
 /src/generated/prisma
