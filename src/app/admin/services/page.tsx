@@ -187,6 +187,25 @@ export default function ServicesQueuePage() {
     }
   }
 
+  const handleSingleServiceUpdate = async (serviceId: string, updates: any) => {
+    try {
+      const response = await fetch('/api/admin/services', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceIds: [serviceId],
+          updates
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to update service')
+      
+      await fetchServices()
+    } catch (error) {
+      console.error('Error updating service:', error)
+    }
+  }
+
   const handleFilterChange = () => {
     setCurrentPage(1)
     setSelectedServices([])
@@ -365,13 +384,15 @@ export default function ServicesQueuePage() {
                 </SelectContent>
               </Select>
               <Select onValueChange={(value) => handleBulkUpdate({ status: value })}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="Status..." />
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Change Status..." />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="PENDING">Set Pending</SelectItem>
                   <SelectItem value="CONFIRMED">Confirm</SelectItem>
-                  <SelectItem value="IN_PROGRESS">Start</SelectItem>
-                  <SelectItem value="ON_HOLD">Hold</SelectItem>
+                  <SelectItem value="IN_PROGRESS">Start Work</SelectItem>
+                  <SelectItem value="COMPLETED">Mark Complete</SelectItem>
+                  <SelectItem value="ON_HOLD">Put on Hold</SelectItem>
                   <SelectItem value="CANCELLED">Cancel</SelectItem>
                 </SelectContent>
               </Select>
@@ -503,9 +524,58 @@ export default function ServicesQueuePage() {
                           </div>
                         </td>
                         <td className="p-4">
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center space-x-2">
+                            {/* Technicians can update status for their assigned services */}
+                            {session.user.role === 'TECHNICIAN' && service.assignedUser?.id === session.user.id ? (
+                              <Select 
+                                value={service.status} 
+                                onValueChange={(newStatus) => handleSingleServiceUpdate(service.id, { status: newStatus })}
+                              >
+                                <SelectTrigger className="w-32 h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {/* Dynamic options based on current status */}
+                                  {service.status === 'PENDING' && (
+                                    <>
+                                      <SelectItem value="CONFIRMED">Confirm</SelectItem>
+                                      <SelectItem value="IN_PROGRESS">Start</SelectItem>
+                                    </>
+                                  )}
+                                  {service.status === 'CONFIRMED' && (
+                                    <>
+                                      <SelectItem value="IN_PROGRESS">Start</SelectItem>
+                                      <SelectItem value="ON_HOLD">Hold</SelectItem>
+                                    </>
+                                  )}
+                                  {service.status === 'IN_PROGRESS' && (
+                                    <>
+                                      <SelectItem value="COMPLETED">Complete</SelectItem>
+                                      <SelectItem value="ON_HOLD">Hold</SelectItem>
+                                    </>
+                                  )}
+                                  {service.status === 'ON_HOLD' && (
+                                    <>
+                                      <SelectItem value="IN_PROGRESS">Resume</SelectItem>
+                                      <SelectItem value="CONFIRMED">Confirm</SelectItem>
+                                    </>
+                                  )}
+                                  {service.status === 'COMPLETED' && (
+                                    <SelectItem value="IN_PROGRESS">Reopen</SelectItem>
+                                  )}
+                                  <SelectItem value={service.status} disabled>
+                                    Current: {service.status.replace('_', ' ')}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Button variant="ghost" size="sm" asChild>
+                                <a href={`/admin/services/${service.id}`}>
+                                  <MoreVertical className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )

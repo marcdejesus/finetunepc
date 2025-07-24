@@ -61,10 +61,11 @@ interface Service {
     image: string | null
     addresses: Array<{
       id: string
-      street: string
+      addressLine1: string
+      addressLine2: string | null
       city: string
       state: string
-      zipCode: string
+      postalCode: string
       type: string
     }>
   }
@@ -126,17 +127,36 @@ export default function ServiceDetailPage() {
   useEffect(() => {
     const fetchService = async () => {
       try {
+        console.log(`🔍 PAGE: Starting to fetch service ${serviceId}`)
+        console.log(`🔍 PAGE: Current session:`, session?.user)
+        
         setLoading(true)
+        
+        console.log(`🔍 PAGE: Making API calls to fetch service and technicians`)
         const [serviceRes, techRes] = await Promise.all([
           fetch(`/api/admin/services/${serviceId}`),
           fetch('/api/admin/services')
         ])
 
-        if (!serviceRes.ok) throw new Error('Failed to fetch service')
-        if (!techRes.ok) throw new Error('Failed to fetch technicians')
+        console.log(`🔍 PAGE: Service API response status: ${serviceRes.status}`)
+        console.log(`🔍 PAGE: Technicians API response status: ${techRes.status}`)
+
+        if (!serviceRes.ok) {
+          const errorData = await serviceRes.text()
+          console.error(`🚫 PAGE: Service API error:`, errorData)
+          throw new Error('Failed to fetch service')
+        }
+        if (!techRes.ok) {
+          const errorData = await techRes.text()
+          console.error(`🚫 PAGE: Technicians API error:`, errorData)
+          throw new Error('Failed to fetch technicians')
+        }
 
         const serviceData = await serviceRes.json()
         const techData = await techRes.json()
+        
+        console.log(`✅ PAGE: Successfully fetched service data:`, serviceData.service?.id)
+        console.log(`✅ PAGE: Successfully fetched technicians count:`, techData.services?.length || 0)
 
         setService(serviceData.service)
         setTechnicians(techData.technicians || [])
@@ -153,7 +173,11 @@ export default function ServiceDetailPage() {
           completionNotes: svc.completionNotes || ''
         })
       } catch (error) {
-        console.error('Error fetching service:', error)
+        console.error('🚫 PAGE: Error fetching service:', error)
+        // Check if it's an auth error by trying to parse the error
+        if (error instanceof Error) {
+          console.error('🚫 PAGE: Error message:', error.message)
+        }
       } finally {
         setLoading(false)
       }
@@ -320,8 +344,10 @@ export default function ServiceDetailPage() {
                   <span className="text-sm font-medium">Address</span>
                 </div>
                 <div className="text-sm text-muted-foreground ml-6">
-                  {service.user.addresses[0].street}<br />
-                  {service.user.addresses[0].city}, {service.user.addresses[0].state} {service.user.addresses[0].zipCode}
+                  {service.user.addresses[0].addressLine1}
+                  {service.user.addresses[0].addressLine2 && <><br />{service.user.addresses[0].addressLine2}</>}
+                  <br />
+                  {service.user.addresses[0].city}, {service.user.addresses[0].state} {service.user.addresses[0].postalCode}
                 </div>
               </div>
             )}
@@ -413,10 +439,39 @@ export default function ServiceDetailPage() {
                       <SelectItem value="ON_HOLD">On Hold</SelectItem>
                     </>
                   ) : (
+                    // Technician status options based on current status
                     <>
-                      <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                      <SelectItem value="COMPLETED">Completed</SelectItem>
-                      <SelectItem value="ON_HOLD">On Hold</SelectItem>
+                      {service.status === 'PENDING' && (
+                        <>
+                          <SelectItem value="CONFIRMED">Confirm Service</SelectItem>
+                          <SelectItem value="IN_PROGRESS">Start Work</SelectItem>
+                        </>
+                      )}
+                      {service.status === 'CONFIRMED' && (
+                        <>
+                          <SelectItem value="IN_PROGRESS">Start Work</SelectItem>
+                          <SelectItem value="ON_HOLD">Put on Hold</SelectItem>
+                        </>
+                      )}
+                      {service.status === 'IN_PROGRESS' && (
+                        <>
+                          <SelectItem value="COMPLETED">Mark Complete</SelectItem>
+                          <SelectItem value="ON_HOLD">Put on Hold</SelectItem>
+                        </>
+                      )}
+                      {service.status === 'ON_HOLD' && (
+                        <>
+                          <SelectItem value="IN_PROGRESS">Resume Work</SelectItem>
+                          <SelectItem value="CONFIRMED">Back to Confirmed</SelectItem>
+                        </>
+                      )}
+                      {service.status === 'COMPLETED' && (
+                        <SelectItem value="IN_PROGRESS">Reopen Service</SelectItem>
+                      )}
+                      {/* Show current status as disabled option for clarity */}
+                      <SelectItem value={service.status} disabled>
+                        Current: {service.status.replace('_', ' ')}
+                      </SelectItem>
                     </>
                   )}
                 </SelectContent>

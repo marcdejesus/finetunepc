@@ -21,12 +21,24 @@ export async function GET(
   { params }: { params: Promise<{ serviceId: string }> }
 ) {
   try {
+    console.log(`🔍 SERVICE_GET: API route called for service details`)
+    
     const session = await auth()
     const { serviceId } = await params
     
-    if (!session?.user || !['ADMIN', 'MANAGER', 'TECHNICIAN'].includes(session.user.role)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    console.log(`🔍 SERVICE_GET: Session check - User: ${session?.user?.id}, Role: ${session?.user?.role}, Service: ${serviceId}`)
+    
+    if (!session?.user) {
+      console.log(`🚫 SERVICE_GET: No session found`)
+      return NextResponse.json({ error: 'Unauthorized - No session' }, { status: 401 })
     }
+    
+    if (!['ADMIN', 'MANAGER', 'TECHNICIAN'].includes(session.user.role)) {
+      console.log(`🚫 SERVICE_GET: Unauthorized - user role: ${session?.user?.role}`)
+      return NextResponse.json({ error: 'Unauthorized - Invalid role' }, { status: 401 })
+    }
+    
+    console.log(`✅ SERVICE_GET: User authorized to access service API`)
 
     const service = await prisma.service.findUnique({
       where: { id: serviceId },
@@ -41,10 +53,11 @@ export async function GET(
             addresses: {
               select: {
                 id: true,
-                street: true,
+                addressLine1: true,
+                addressLine2: true,
                 city: true,
                 state: true,
-                zipCode: true,
+                postalCode: true,
                 type: true
               }
             }
@@ -64,13 +77,19 @@ export async function GET(
     })
 
     if (!service) {
+      console.log(`🚫 SERVICE_GET: Service ${serviceId} not found`)
       return NextResponse.json({ error: 'Service not found' }, { status: 404 })
     }
 
+    console.log(`🔍 SERVICE_GET: Found service ${serviceId}, assignedTo: ${service.assignedTo}`)
+
     // If technician, only allow access to their assigned services
     if (session.user.role === 'TECHNICIAN' && service.assignedTo !== session.user.id) {
+      console.log(`🚫 SERVICE_GET: Technician ${session.user.id} denied access to service ${serviceId} (assigned to ${service.assignedTo})`)
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
+
+    console.log(`✅ SERVICE_GET: Access granted for ${session.user.role} ${session.user.id} to service ${serviceId}`)
 
     return NextResponse.json({ service })
   } catch (error) {
@@ -129,12 +148,30 @@ export async function PATCH(
         }
       }
       
-      // Technicians can only transition to certain statuses
-      if (techUpdates.status && !['IN_PROGRESS', 'COMPLETED', 'ON_HOLD'].includes(techUpdates.status)) {
-        return NextResponse.json(
-          { error: 'Technicians can only set status to IN_PROGRESS, COMPLETED, or ON_HOLD' },
-          { status: 403 }
-        )
+      // Technicians can transition between work-related statuses
+      if (techUpdates.status) {
+        const currentStatus = currentService.status
+        const newStatus = techUpdates.status
+        
+        // Define allowed transitions for technicians
+        const allowedTransitions: Record<string, string[]> = {
+          'PENDING': ['CONFIRMED', 'IN_PROGRESS'],
+          'CONFIRMED': ['IN_PROGRESS', 'ON_HOLD'],
+          'IN_PROGRESS': ['COMPLETED', 'ON_HOLD'],
+          'ON_HOLD': ['IN_PROGRESS', 'CONFIRMED'],
+          'COMPLETED': ['IN_PROGRESS'], // Allow reopening if needed
+        }
+        
+        // Check if the transition is allowed
+        const allowedNextStatuses = allowedTransitions[currentStatus] || []
+        if (!allowedNextStatuses.includes(newStatus)) {
+          return NextResponse.json(
+            { 
+              error: `Cannot transition from ${currentStatus} to ${newStatus}. Allowed transitions: ${allowedNextStatuses.join(', ')}` 
+            },
+            { status: 403 }
+          )
+        }
       }
       
       Object.assign(validatedData, techUpdates)

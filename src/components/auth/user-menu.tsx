@@ -99,7 +99,18 @@ export default function UserMenu() {
                 Services
               </Link>
               
-              {session.user.role === "ADMIN" && (
+              {["TECHNICIAN", "MANAGER"].includes(session.user.role) && (
+                <Link
+                  href="/technician"
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Wrench className="mr-3 h-4 w-4" />
+                  Technician Dashboard
+                </Link>
+              )}
+
+              {["ADMIN", "MANAGER"].includes(session.user.role) && (
                 <Link
                   href="/admin"
                   className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
