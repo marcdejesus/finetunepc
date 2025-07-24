@@ -7,11 +7,26 @@ const createProductSchema = z.object({
   name: z.string().min(1, 'Product name is required'),
   slug: z.string().min(1, 'Slug is required'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
+  shortDescription: z.string().optional(),
   price: z.number().positive('Price must be positive'),
+  comparePrice: z.number().optional(),
+  costPrice: z.number().optional(),
   stock: z.number().int().min(0, 'Stock must be non-negative'),
+  sku: z.string().optional(),
+  weight: z.number().optional(),
   categoryId: z.string().min(1, 'Category is required'),
+  brand: z.string().optional(),
+  warranty: z.string().optional(),
   specifications: z.record(z.any()).optional(),
   featured: z.boolean().default(false),
+  isActive: z.boolean().default(true),
+  metaTitle: z.string().optional(),
+  metaDescription: z.string().optional(),
+  images: z.array(z.object({
+    url: z.string().url(),
+    altText: z.string(),
+    position: z.number().int().min(0)
+  })).optional().default([])
 })
 
 const updateProductSchema = createProductSchema.partial()
@@ -206,27 +221,64 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const product = await prisma.product.create({
-      data: validatedData,
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true
+    // Extract images from the validated data
+    const { images, ...productData } = validatedData
+
+    // Create product with images in a transaction
+    const product = await prisma.$transaction(async (tx) => {
+      // Create the product first
+      const newProduct = await tx.product.create({
+        data: productData,
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true
+            }
           }
-        },
-        images: {
-          select: {
-            id: true,
-            url: true,
-            altText: true,
-            position: true
-          },
-          orderBy: { position: 'asc' }
         }
+      })
+
+      // Create product images if provided
+      if (images && images.length > 0) {
+        await tx.productImage.createMany({
+          data: images.map(img => ({
+            productId: newProduct.id,
+            url: img.url,
+            altText: img.altText || '',
+            position: img.position
+          }))
+        })
       }
+
+      // Fetch the complete product with images
+      return await tx.product.findUnique({
+        where: { id: newProduct.id },
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true
+            }
+          },
+          images: {
+            select: {
+              id: true,
+              url: true,
+              altText: true,
+              position: true
+            },
+            orderBy: { position: 'asc' }
+          }
+        }
+      })
     })
+
+    if (!product) {
+      throw new Error('Failed to create product')
+    }
 
     // Convert Decimal fields to numbers
     const productWithNumbers = {

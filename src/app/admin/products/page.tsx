@@ -321,11 +321,16 @@ export default function AdminProductsPage() {
             </p>
           </div>
           
+          <Button onClick={() => window.location.href = '/admin/products/create'}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Product
+          </Button>
+          
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button variant="outline">
                 <Plus className="h-4 w-4 mr-2" />
-                Add Product
+                Quick Add
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
