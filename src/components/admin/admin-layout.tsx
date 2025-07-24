@@ -60,6 +60,11 @@ const sidebarItems = [
     icon: Activity,
   },
   {
+    title: 'Service Analytics',
+    href: '/admin/services/analytics',
+    icon: BarChart3,
+  },
+  {
     title: 'Analytics',
     href: '/admin/analytics',
     icon: BarChart3,

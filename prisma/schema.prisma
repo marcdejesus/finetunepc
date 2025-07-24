@@ -58,14 +58,15 @@ model User {
   dateOfBirth   DateTime?
   
   // Relations
-  accounts      Account[]
-  sessions      Session[]
-  orders        Order[]
-  services      Service[]
-  cart          Cart?
-  addresses     Address[]
-  reviews       Review[]
-  activityLogs  ActivityLog[]
+  accounts        Account[]
+  sessions        Session[]
+  orders          Order[]
+  services        Service[]
+  assignedServices Service[] @relation("AssignedServices")
+  cart            Cart?
+  addresses       Address[]
+  reviews         Review[]
+  activityLogs    ActivityLog[]
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -254,6 +255,7 @@ model Service {
   partsUsed     String[]
   
   user          User          @relation(fields: [userId], references: [id])
+  assignedUser  User?         @relation("AssignedServices", fields: [assignedTo], references: [id])
   
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
