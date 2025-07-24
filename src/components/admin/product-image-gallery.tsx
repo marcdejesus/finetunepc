@@ -44,17 +44,30 @@ export function ProductImageGallery({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
 
   const handleUploadComplete = async (res: any[]) => {
-    if (!res || res.length === 0) return
+    console.log('[PRODUCT_IMAGE_GALLERY] Upload complete callback triggered')
+    console.log('[PRODUCT_IMAGE_GALLERY] Upload results:', res)
+    
+    if (!res || res.length === 0) {
+      console.log('[PRODUCT_IMAGE_GALLERY] No upload results received')
+      return
+    }
 
-    const newImages = res.map((file, index) => ({
-      id: `temp-${Date.now()}-${index}`,
-      url: file.url,
-      altText: '',
-      position: images.length + index
-    }))
+    const newImages = res.map((file, index) => {
+      const newImage = {
+        id: `temp-${Date.now()}-${index}`,
+        url: file.url,
+        altText: '',
+        position: images.length + index
+      }
+      console.log('[PRODUCT_IMAGE_GALLERY] Creating new image object:', newImage)
+      return newImage
+    })
+
+    console.log('[PRODUCT_IMAGE_GALLERY] New images to add:', newImages)
 
     // If we have a productId, save images to database
     if (productId) {
+      console.log('[PRODUCT_IMAGE_GALLERY] Product ID exists, saving to database:', productId)
       try {
         const response = await fetch(`/api/admin/products/${productId}/images`, {
           method: 'POST',
@@ -68,23 +81,48 @@ export function ProductImageGallery({
           })
         })
 
+        console.log('[PRODUCT_IMAGE_GALLERY] Database save response status:', response.status)
+
         if (response.ok) {
           const { images: savedImages } = await response.json()
+          console.log('[PRODUCT_IMAGE_GALLERY] Images saved to database:', savedImages)
           onImagesChange([...images, ...savedImages])
         } else {
-          console.error('Failed to save images')
+          const errorData = await response.json()
+          console.error('[PRODUCT_IMAGE_GALLERY] Failed to save images to database:', errorData)
           onImagesChange([...images, ...newImages])
         }
       } catch (error) {
-        console.error('Error saving images:', error)
+        console.error('[PRODUCT_IMAGE_GALLERY] Error saving images to database:', error)
         onImagesChange([...images, ...newImages])
       }
     } else {
+      console.log('[PRODUCT_IMAGE_GALLERY] No product ID, updating local state only')
       onImagesChange([...images, ...newImages])
     }
+    
+    setUploading(false)
+  }
+
+  const handleUploadError = (error: Error) => {
+    console.error('[PRODUCT_IMAGE_GALLERY] Upload error:', error)
+    console.error('[PRODUCT_IMAGE_GALLERY] Error details:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack
+    })
+    alert(`Upload failed: ${error.message}`)
+    setUploading(false)
+  }
+
+  const handleUploadBegin = () => {
+    console.log('[PRODUCT_IMAGE_GALLERY] Upload began')
+    setUploading(true)
   }
 
   const handleImageUpdate = async (imageId: string, altText: string) => {
+    console.log('[PRODUCT_IMAGE_GALLERY] Updating image:', imageId, 'altText:', altText)
+    
     const updatedImages = images.map(img => 
       img.id === imageId ? { ...img, altText } : img
     )
@@ -92,14 +130,16 @@ export function ProductImageGallery({
 
     // Update in database if productId exists
     if (productId && !imageId.startsWith('temp-')) {
+      console.log('[PRODUCT_IMAGE_GALLERY] Updating image in database')
       try {
-        await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
+        const response = await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ altText })
         })
+        console.log('[PRODUCT_IMAGE_GALLERY] Image update response status:', response.status)
       } catch (error) {
-        console.error('Error updating image:', error)
+        console.error('[PRODUCT_IMAGE_GALLERY] Error updating image:', error)
       }
     }
 
@@ -109,22 +149,27 @@ export function ProductImageGallery({
   const handleImageDelete = async (imageId: string) => {
     if (!confirm('Are you sure you want to delete this image?')) return
 
+    console.log('[PRODUCT_IMAGE_GALLERY] Deleting image:', imageId)
+
     const updatedImages = images.filter(img => img.id !== imageId)
     onImagesChange(updatedImages)
 
     // Delete from database if productId exists
     if (productId && !imageId.startsWith('temp-')) {
+      console.log('[PRODUCT_IMAGE_GALLERY] Deleting image from database')
       try {
-        await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
+        const response = await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
           method: 'DELETE'
         })
+        console.log('[PRODUCT_IMAGE_GALLERY] Image delete response status:', response.status)
       } catch (error) {
-        console.error('Error deleting image:', error)
+        console.error('[PRODUCT_IMAGE_GALLERY] Error deleting image:', error)
       }
     }
   }
 
   const handleDragStart = (index: number) => {
+    console.log('[PRODUCT_IMAGE_GALLERY] Drag started for index:', index)
     setDraggedIndex(index)
   }
 
@@ -134,6 +179,7 @@ export function ProductImageGallery({
 
   const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault()
+    console.log('[PRODUCT_IMAGE_GALLERY] Drop at index:', dropIndex, 'from:', draggedIndex)
     
     if (draggedIndex === null || draggedIndex === dropIndex) {
       setDraggedIndex(null)
@@ -150,12 +196,14 @@ export function ProductImageGallery({
       position: index
     }))
 
+    console.log('[PRODUCT_IMAGE_GALLERY] Reordered images:', updatedImages)
     onImagesChange(updatedImages)
 
     // Update positions in database if productId exists
     if (productId) {
+      console.log('[PRODUCT_IMAGE_GALLERY] Updating image positions in database')
       try {
-        await fetch(`/api/admin/products/${productId}/images/reorder`, {
+        const response = await fetch(`/api/admin/products/${productId}/images/reorder`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -165,13 +213,21 @@ export function ProductImageGallery({
             }))
           })
         })
+        console.log('[PRODUCT_IMAGE_GALLERY] Reorder response status:', response.status)
       } catch (error) {
-        console.error('Error reordering images:', error)
+        console.error('[PRODUCT_IMAGE_GALLERY] Error reordering images:', error)
       }
     }
 
     setDraggedIndex(null)
   }
+
+  console.log('[PRODUCT_IMAGE_GALLERY] Rendering with:', {
+    productId,
+    imagesCount: images.length,
+    maxImages,
+    uploading
+  })
 
   return (
     <Card>
@@ -186,17 +242,29 @@ export function ProductImageGallery({
         {/* Upload Area */}
         {images.length < maxImages && (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-            <UploadDropzone<OurFileRouter, "productImage">
-              endpoint="productImage"
-              onClientUploadComplete={handleUploadComplete}
-              onUploadError={(error: Error) => {
-                console.error('Upload error:', error)
-                alert(`Upload failed: ${error.message}`)
-              }}
-              onUploadBegin={() => setUploading(true)}
-              onDrop={() => setUploading(false)}
-              className="ut-label:text-lg ut-allowed-content:ut-uploading:text-red-300"
-            />
+            <div className="text-center space-y-4">
+              <p className="text-sm text-gray-600 mb-4">
+                Upload product images (max {maxImages - images.length} more)
+              </p>
+              
+              <UploadDropzone<OurFileRouter, "productImage">
+                endpoint="productImage"
+                onClientUploadComplete={handleUploadComplete}
+                onUploadError={handleUploadError}
+                onUploadBegin={handleUploadBegin}
+                className="ut-label:text-lg ut-allowed-content:ut-uploading:text-red-300"
+                config={{ mode: "auto" }}
+              />
+              
+              <div className="mt-4">
+                <UploadButton<OurFileRouter, "productImage">
+                  endpoint="productImage"
+                  onClientUploadComplete={handleUploadComplete}
+                  onUploadError={handleUploadError}
+                  onUploadBegin={handleUploadBegin}
+                />
+              </div>
+            </div>
             
             {uploading && (
               <div className="flex items-center justify-center mt-4">
@@ -347,7 +415,16 @@ export function ProductImageGallery({
             <li>• Drag and drop to reorder images</li>
             <li>• Add alt text for better accessibility and SEO</li>
             <li>• Maximum {maxImages} images per product</li>
+            <li>• Supported formats: JPEG, PNG, WebP (max 4MB each)</li>
           </ul>
+        </div>
+
+        {/* Debug Info */}
+        <div className="bg-gray-50 p-3 rounded text-xs">
+          <div className="font-medium mb-1">Debug Info:</div>
+          <div>Images: {images.length}/{maxImages}</div>
+          <div>Uploading: {uploading ? 'Yes' : 'No'}</div>
+          <div>Product ID: {productId || 'Not set (new product)'}</div>
         </div>
       </CardContent>
     </Card>

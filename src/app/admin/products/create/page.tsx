@@ -18,7 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, Save, Upload } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { ArrowLeft, Save, Upload, Plus } from 'lucide-react'
 
 interface ProductImage {
   id: string
@@ -39,6 +47,9 @@ export default function CreateProductPage() {
   const [images, setImages] = useState<ProductImage[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showCreateCategory, setShowCreateCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [creatingCategory, setCreatingCategory] = useState(false)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -66,14 +77,75 @@ export default function CreateProductPage() {
   }, [])
 
   const fetchCategories = async () => {
+    console.log('[CREATE_PRODUCT_PAGE] Fetching categories...')
     try {
       const response = await fetch('/api/categories')
+      console.log('[CREATE_PRODUCT_PAGE] Categories API response status:', response.status)
+      
       if (response.ok) {
         const data = await response.json()
-        setCategories(data.categories || [])
+        console.log('[CREATE_PRODUCT_PAGE] Categories data received:', data)
+        
+        // Handle both array response and object with categories property
+        const categoriesArray = Array.isArray(data) ? data : (data.categories || [])
+        setCategories(categoriesArray)
+        console.log('[CREATE_PRODUCT_PAGE] Categories set:', categoriesArray.length, 'categories')
+      } else {
+        const errorData = await response.json()
+        console.error('[CREATE_PRODUCT_PAGE] Error fetching categories:', errorData)
       }
     } catch (error) {
-      console.error('Error fetching categories:', error)
+      console.error('[CREATE_PRODUCT_PAGE] Network error fetching categories:', error)
+    }
+  }
+
+  const createCategory = async () => {
+    if (!newCategoryName.trim()) {
+      alert('Please enter a category name')
+      return
+    }
+
+    console.log('[CREATE_PRODUCT_PAGE] Creating new category:', newCategoryName)
+    setCreatingCategory(true)
+    
+    try {
+      const categorySlug = newCategoryName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '')
+
+      const response = await fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newCategoryName.trim(),
+          slug: categorySlug,
+          description: `${newCategoryName} category`,
+          isActive: true
+        })
+      })
+
+      console.log('[CREATE_PRODUCT_PAGE] Category creation response status:', response.status)
+
+      if (response.ok) {
+        const newCategory = await response.json()
+        console.log('[CREATE_PRODUCT_PAGE] New category created:', newCategory)
+        
+        setCategories(prev => [...prev, newCategory.category || newCategory])
+        setFormData(prev => ({ ...prev, categoryId: (newCategory.category || newCategory).id }))
+        setNewCategoryName('')
+        setShowCreateCategory(false)
+        alert('Category created successfully!')
+      } else {
+        const errorData = await response.json()
+        console.error('[CREATE_PRODUCT_PAGE] Error creating category:', errorData)
+        alert(`Error creating category: ${errorData.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('[CREATE_PRODUCT_PAGE] Network error creating category:', error)
+      alert('Error creating category. Please try again.')
+    } finally {
+      setCreatingCategory(false)
     }
   }
 
@@ -85,6 +157,7 @@ export default function CreateProductPage() {
   }
 
   const handleInputChange = (field: string, value: any) => {
+    console.log(`[CREATE_PRODUCT_PAGE] Field '${field}' changed to:`, value)
     setFormData(prev => ({
       ...prev,
       [field]: value,
@@ -93,6 +166,7 @@ export default function CreateProductPage() {
   }
 
   const handleSpecificationChange = (key: string, value: string) => {
+    console.log(`[CREATE_PRODUCT_PAGE] Specification '${key}' changed to:`, value)
     setFormData(prev => ({
       ...prev,
       specifications: {
@@ -105,11 +179,13 @@ export default function CreateProductPage() {
   const addSpecificationField = () => {
     const key = prompt('Enter specification name:')
     if (key && key.trim()) {
+      console.log('[CREATE_PRODUCT_PAGE] Adding specification field:', key.trim())
       handleSpecificationChange(key.trim(), '')
     }
   }
 
   const removeSpecificationField = (key: string) => {
+    console.log('[CREATE_PRODUCT_PAGE] Removing specification field:', key)
     setFormData(prev => {
       const newSpecs = { ...prev.specifications }
       delete newSpecs[key]
@@ -121,6 +197,8 @@ export default function CreateProductPage() {
   }
 
   const validateForm = () => {
+    console.log('[CREATE_PRODUCT_PAGE] Validating form data:', formData)
+    
     if (!formData.name.trim()) {
       alert('Product name is required')
       return false
@@ -133,20 +211,24 @@ export default function CreateProductPage() {
       alert('Product price must be greater than 0')
       return false
     }
-    if (!formData.categoryId) {
-      alert('Please select a category')
+    if (!formData.categoryId || formData.categoryId === 'no-categories') {
+      alert('Please select a valid category or create one first')
       return false
     }
+    
+    console.log('[CREATE_PRODUCT_PAGE] Form validation passed')
     return true
   }
 
   const handleSave = async () => {
+    console.log('[CREATE_PRODUCT_PAGE] Save button clicked')
+    
     if (!validateForm()) return
 
     setSaving(true)
     try {
-      console.log('[CREATE_PRODUCT] Saving product with data:', formData)
-      console.log('[CREATE_PRODUCT] Images to associate:', images)
+      console.log('[CREATE_PRODUCT_PAGE] Saving product with data:', formData)
+      console.log('[CREATE_PRODUCT_PAGE] Images to associate:', images)
 
       const response = await fetch('/api/admin/products', {
         method: 'POST',
@@ -161,22 +243,35 @@ export default function CreateProductPage() {
         })
       })
 
+      console.log('[CREATE_PRODUCT_PAGE] API response status:', response.status)
+
       if (response.ok) {
         const { product } = await response.json()
-        console.log('[CREATE_PRODUCT] Product created successfully:', product.id)
-        router.push(`/admin/products/${product.id}`)
+        console.log('[CREATE_PRODUCT_PAGE] Product created successfully:', product.id)
+        alert('Product created successfully!')
+        router.push(`/admin/products`)
       } else {
         const error = await response.json()
-        console.error('[CREATE_PRODUCT] Error creating product:', error)
+        console.error('[CREATE_PRODUCT_PAGE] Error creating product:', error)
         alert(`Error creating product: ${error.error || 'Unknown error'}`)
       }
     } catch (error) {
-      console.error('[CREATE_PRODUCT] Network error:', error)
+      console.error('[CREATE_PRODUCT_PAGE] Network error:', error)
       alert('Error creating product. Please try again.')
     } finally {
       setSaving(false)
     }
   }
+
+  // Debug logging for images
+  useEffect(() => {
+    console.log('[CREATE_PRODUCT_PAGE] Images state updated:', images)
+  }, [images])
+
+  // Debug logging for categories
+  useEffect(() => {
+    console.log('[CREATE_PRODUCT_PAGE] Categories state updated:', categories)
+  }, [categories])
 
   return (
     <AdminLayout>
@@ -205,7 +300,7 @@ export default function CreateProductPage() {
           </Button>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Form */}
           <div className="lg:col-span-2 space-y-6">
             {/* Basic Information */}
@@ -447,7 +542,17 @@ export default function CreateProductPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="category">Category *</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label htmlFor="category">Category *</Label>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowCreateCategory(true)}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      New
+                    </Button>
+                  </div>
                   <Select
                     value={formData.categoryId}
                     onValueChange={(value) => handleInputChange('categoryId', value)}
@@ -456,13 +561,24 @@ export default function CreateProductPage() {
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
+                      {categories.length === 0 ? (
+                        <SelectItem value="no-categories" disabled>
+                          No categories found - Create one first
                         </SelectItem>
-                      ))}
+                      ) : (
+                        categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
+                  {categories.length === 0 && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      No categories available. Click "New" to create one.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -497,6 +613,44 @@ export default function CreateProductPage() {
             <ReviewImport />
           </div>
         </div>
+
+        {/* Create Category Modal */}
+        <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Category</DialogTitle>
+              <DialogDescription>
+                Add a new product category to organize your inventory
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="categoryName">Category Name</Label>
+                <Input
+                  id="categoryName"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Enter category name"
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowCreateCategory(false)}
+                  disabled={creatingCategory}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={createCategory}
+                  disabled={creatingCategory || !newCategoryName.trim()}
+                >
+                  {creatingCategory ? 'Creating...' : 'Create Category'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   )

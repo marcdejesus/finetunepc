@@ -223,9 +223,9 @@ export function ReviewImport({ productId }: ReviewImportProps) {
   const downloadTemplate = () => {
     const template = [
       {
-        productId: "prod_123 (optional if productId prop is provided)",
-        productSku: "SKU-123 (alternative to productId)",
-        productSlug: "product-slug (alternative to productId)",
+        productId: "Use actual product ID from database",
+        productSku: "Alternative: use SKU like 'AMD-7950X'",
+        productSlug: "Alternative: use slug like 'amd-ryzen-9-7950x'",
         userEmail: "customer@example.com",
         userName: "John Doe",
         rating: 5,
@@ -235,6 +235,54 @@ export function ReviewImport({ productId }: ReviewImportProps) {
         helpful: 2,
         isVisible: true,
         createdAt: "2024-01-15T10:30:00Z"
+      },
+      {
+        productSlug: "amd-ryzen-9-7950x",
+        userEmail: "gamer123@example.com",
+        userName: "Gaming Enthusiast",
+        rating: 5,
+        title: "Incredible Performance!",
+        comment: "This processor is absolutely amazing for gaming and content creation.",
+        verified: true,
+        helpful: 15,
+        isVisible: true,
+        createdAt: "2024-01-10T14:30:00Z"
+      },
+      {
+        productSlug: "nvidia-rtx-4090",
+        userEmail: "techreview@example.com",
+        userName: "Tech Reviewer",
+        rating: 5,
+        title: "Beast of a GPU",
+        comment: "Handles 4K gaming with ray tracing like a champ. Expensive but worth it.",
+        verified: true,
+        helpful: 23,
+        isVisible: true,
+        createdAt: "2024-01-08T09:15:00Z"
+      },
+      {
+        productSlug: "corsair-vengeance-ddr5-32gb",
+        userEmail: "builder@example.com", 
+        userName: "PC Builder",
+        rating: 4,
+        title: "Great Memory Kit",
+        comment: "Fast and reliable DDR5 memory. Works perfectly with my AMD build.",
+        verified: true,
+        helpful: 8,
+        isVisible: true,
+        createdAt: "2024-01-05T16:45:00Z"
+      },
+      {
+        productSlug: "gaming-monitor-27-inch",
+        userEmail: "visual@example.com",
+        userName: "Visual Designer", 
+        rating: 5,
+        title: "Amazing Display Quality",
+        comment: "Perfect for both gaming and professional work. Colors are vibrant and motion is smooth.",
+        verified: true,
+        helpful: 12,
+        isVisible: true,
+        createdAt: "2024-01-03T11:20:00Z"
       }
     ]
 

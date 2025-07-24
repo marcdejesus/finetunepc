@@ -193,115 +193,195 @@ export async function GET(request: NextRequest) {
 // POST - Create new product
 export async function POST(request: NextRequest) {
   try {
-    console.log('[ADMIN_PRODUCTS_POST] Creating new product...')
+    console.log('[ADMIN_PRODUCTS_POST] ============ Creating new product ============')
     
     const session = await auth()
-    console.log(`[ADMIN_PRODUCTS_POST] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
+    console.log(`[ADMIN_PRODUCTS_POST] Session validation:`, {
+      userExists: !!session?.user?.id,
+      userId: session?.user?.id,
+      userRole: session?.user?.role,
+      isAdmin: session?.user?.role === 'ADMIN'
+    })
     
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
-      console.log('[ADMIN_PRODUCTS_POST] Unauthorized access attempt')
+      console.log('[ADMIN_PRODUCTS_POST] ❌ Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
-    console.log('[ADMIN_PRODUCTS_POST] Request body:', JSON.stringify(body, null, 2))
-    
-    const validatedData = createProductSchema.parse(body)
-    console.log('[ADMIN_PRODUCTS_POST] Validated data:', JSON.stringify(validatedData, null, 2))
-
-    // Check if slug already exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { slug: validatedData.slug }
+    console.log('[ADMIN_PRODUCTS_POST] Raw request body received:', Object.keys(body))
+    console.log('[ADMIN_PRODUCTS_POST] Form data preview:', {
+      name: body.name,
+      price: body.price,
+      categoryId: body.categoryId,
+      imagesCount: body.images?.length || 0
     })
-
-    if (existingProduct) {
-      return NextResponse.json(
-        { error: 'Product with this slug already exists' },
-        { status: 400 }
-      )
-    }
-
-    // Extract images from the validated data
-    const { images, ...productData } = validatedData
-
-    // Create product with images in a transaction
-    const product = await prisma.$transaction(async (tx) => {
-      // Create the product first
-      const newProduct = await tx.product.create({
-        data: productData,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
-            }
-          }
-        }
+    
+    // Validate the request body step by step
+    console.log('[ADMIN_PRODUCTS_POST] Starting validation...')
+    
+    try {
+      const validatedData = createProductSchema.parse(body)
+      console.log('[ADMIN_PRODUCTS_POST] ✅ Validation successful')
+      console.log('[ADMIN_PRODUCTS_POST] Validated data preview:', {
+        name: validatedData.name,
+        slug: validatedData.slug,
+        price: validatedData.price,
+        categoryId: validatedData.categoryId,
+        imagesCount: validatedData.images?.length || 0
       })
 
-      // Create product images if provided
-      if (images && images.length > 0) {
-        await tx.productImage.createMany({
-          data: images.map(img => ({
+      // Check if slug already exists
+      console.log('[ADMIN_PRODUCTS_POST] Checking for existing slug:', validatedData.slug)
+      const existingProduct = await prisma.product.findUnique({
+        where: { slug: validatedData.slug }
+      })
+
+      if (existingProduct) {
+        console.log('[ADMIN_PRODUCTS_POST] ❌ Slug already exists:', validatedData.slug)
+        return NextResponse.json(
+          { error: 'Product with this slug already exists' },
+          { status: 400 }
+        )
+      }
+
+      // Check if category exists
+      console.log('[ADMIN_PRODUCTS_POST] Verifying category exists:', validatedData.categoryId)
+      const category = await prisma.category.findUnique({
+        where: { id: validatedData.categoryId }
+      })
+
+      if (!category) {
+        console.log('[ADMIN_PRODUCTS_POST] ❌ Category not found:', validatedData.categoryId)
+        return NextResponse.json(
+          { error: 'Selected category does not exist' },
+          { status: 400 }
+        )
+      }
+
+      console.log('[ADMIN_PRODUCTS_POST] ✅ Category found:', category.name)
+
+      // Extract images from the validated data
+      const { images, ...productData } = validatedData
+      console.log('[ADMIN_PRODUCTS_POST] Product data for creation:', {
+        ...productData,
+        specifications: Object.keys(productData.specifications || {}).length
+      })
+      console.log('[ADMIN_PRODUCTS_POST] Images to process:', images?.length || 0)
+
+      // Create product with images in a transaction
+      console.log('[ADMIN_PRODUCTS_POST] Starting database transaction...')
+      const product = await prisma.$transaction(async (tx) => {
+        // Create the product first
+        console.log('[ADMIN_PRODUCTS_POST] Creating product record...')
+        const newProduct = await tx.product.create({
+          data: productData,
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true
+              }
+            }
+          }
+        })
+        console.log('[ADMIN_PRODUCTS_POST] ✅ Product created with ID:', newProduct.id)
+
+        // Create product images if provided
+        if (images && images.length > 0) {
+          console.log('[ADMIN_PRODUCTS_POST] Creating product images...')
+          const imageData = images.map(img => ({
             productId: newProduct.id,
             url: img.url,
             altText: img.altText || '',
             position: img.position
           }))
+          console.log('[ADMIN_PRODUCTS_POST] Image data:', imageData)
+
+          await tx.productImage.createMany({
+            data: imageData
+          })
+          console.log('[ADMIN_PRODUCTS_POST] ✅ Created', images.length, 'product images')
+        }
+
+        // Fetch the complete product with images
+        console.log('[ADMIN_PRODUCTS_POST] Fetching complete product data...')
+        return await tx.product.findUnique({
+          where: { id: newProduct.id },
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true
+              }
+            },
+            images: {
+              select: {
+                id: true,
+                url: true,
+                altText: true,
+                position: true
+              },
+              orderBy: { position: 'asc' }
+            }
+          }
         })
+      })
+
+      if (!product) {
+        throw new Error('Failed to create product')
       }
 
-      // Fetch the complete product with images
-      return await tx.product.findUnique({
-        where: { id: newProduct.id },
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
-            }
-          },
-          images: {
-            select: {
-              id: true,
-              url: true,
-              altText: true,
-              position: true
-            },
-            orderBy: { position: 'asc' }
-          }
-        }
+      // Convert Decimal fields to numbers
+      const productWithNumbers = {
+        ...product,
+        price: Number(product.price),
+        comparePrice: product.comparePrice ? Number(product.comparePrice) : null,
+        costPrice: product.costPrice ? Number(product.costPrice) : null,
+      }
+
+      console.log(`[ADMIN_PRODUCTS_POST] ✅ SUCCESS: Product "${product.name}" created successfully`)
+      console.log('[ADMIN_PRODUCTS_POST] Final product data:', {
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        categoryName: product.category.name,
+        imagesCount: product.images.length,
+        price: productWithNumbers.price
       })
-    })
 
-    if (!product) {
-      throw new Error('Failed to create product')
+      return NextResponse.json({ product: productWithNumbers }, { status: 201 })
+      
+    } catch (validationError) {
+      if (validationError instanceof z.ZodError) {
+        console.log('[ADMIN_PRODUCTS_POST] ❌ Validation failed:', validationError.errors)
+        return NextResponse.json(
+          { 
+            error: 'Validation error', 
+            details: validationError.errors,
+            message: 'Please check your input data'
+          },
+          { status: 400 }
+        )
+      }
+      throw validationError
     }
 
-    // Convert Decimal fields to numbers
-    const productWithNumbers = {
-      ...product,
-      price: Number(product.price),
-      comparePrice: product.comparePrice ? Number(product.comparePrice) : null,
-      costPrice: product.costPrice ? Number(product.costPrice) : null,
-    }
-
-    console.log(`[ADMIN_PRODUCTS_POST] Successfully created product: ${product.name} (${product.id})`)
-
-    return NextResponse.json({ product: productWithNumbers }, { status: 201 })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
-        { status: 400 }
-      )
-    }
-
-    console.error('Error creating product:', error)
+    console.error('[ADMIN_PRODUCTS_POST] ❌ UNEXPECTED ERROR:', error)
+    console.error('[ADMIN_PRODUCTS_POST] Error details:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack
+    })
+    
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        message: 'An unexpected error occurred while creating the product'
+      },
       { status: 500 }
     )
   }

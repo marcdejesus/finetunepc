@@ -475,9 +475,16 @@ async function main() {
   console.log('⭐ Creating sample reviews...')
   
   await Promise.all([
-    prisma.review.create({
-      data: {
-        productId: products[0].id, // AMD Ryzen 9 7950X
+    prisma.review.upsert({
+      where: {
+        productId_userId: {
+          productId: products[0].id, // AMD Ryzen 9 7950X
+          userId: testUser.id,
+        }
+      },
+      update: {},
+      create: {
+        productId: products[0].id,
         userId: testUser.id,
         rating: 5,
         title: 'Incredible Performance!',
@@ -487,15 +494,109 @@ async function main() {
       },
     }),
     
-    prisma.review.create({
-      data: {
-        productId: products[2].id, // RTX 4090
-        userId: testUser.id,
+    prisma.review.upsert({
+      where: {
+        productId_userId: {
+          productId: products[2].id, // RTX 4090
+          userId: adminUser.id, // Use admin user for second review to avoid conflict
+        }
+      },
+      update: {},
+      create: {
+        productId: products[2].id,
+        userId: adminUser.id,
         rating: 5,
         title: 'Beast of a GPU',
         comment: 'Handles 4K gaming with ray tracing like a champ. Expensive but worth every penny.',
         verified: true,
         helpful: 23,
+      },
+    }),
+  ])
+
+  // Create sample products for testing review import with proper IDs
+  console.log('🎮 Creating sample gaming products for review import testing...')
+  
+  await Promise.all([
+    prisma.product.upsert({
+      where: { slug: 'gaming-monitor-27-inch' },
+      update: {},
+      create: {
+        name: 'Gaming Monitor 27" 4K',
+        slug: 'gaming-monitor-27-inch',
+        description: 'High-performance 27-inch 4K gaming monitor with 144Hz refresh rate and HDR support.',
+        shortDescription: '27-inch 4K gaming monitor with 144Hz',
+        price: 499.99,
+        stock: 12,
+        sku: 'GM-27-4K-144',
+        categoryId: categories[8].id, // peripherals
+        brand: 'TechDisplay',
+        warranty: '3 years',
+        specifications: {
+          size: '27 inches',
+          resolution: '3840x2160',
+          refreshRate: '144Hz',
+          panelType: 'IPS',
+          hdr: 'HDR10',
+          inputs: ['DisplayPort 1.4', 'HDMI 2.1']
+        },
+        tags: ['Gaming', 'Monitor', '4K', 'HDR'],
+        featured: false,
+        isActive: true,
+      },
+    }),
+    
+    prisma.product.upsert({
+      where: { slug: 'mechanical-keyboard-rgb' },
+      update: {},
+      create: {
+        name: 'Mechanical Gaming Keyboard RGB',
+        slug: 'mechanical-keyboard-rgb',
+        description: 'Premium mechanical gaming keyboard with RGB backlighting and Cherry MX switches.',
+        shortDescription: 'RGB mechanical gaming keyboard',
+        price: 149.99,
+        stock: 35,
+        sku: 'MK-RGB-CM',
+        categoryId: categories[8].id, // peripherals
+        brand: 'KeyMaster',
+        warranty: '2 years',
+        specifications: {
+          switches: 'Cherry MX Red',
+          backlighting: 'RGB',
+          layout: 'Full Size',
+          connectivity: 'USB-C',
+          features: ['N-Key Rollover', 'Anti-Ghosting']
+        },
+        tags: ['Gaming', 'Keyboard', 'RGB', 'Mechanical'],
+        featured: false,
+        isActive: true,
+      },
+    }),
+    
+    prisma.product.upsert({
+      where: { slug: 'gaming-mouse-wireless' },
+      update: {},
+      create: {
+        name: 'Wireless Gaming Mouse Pro',
+        slug: 'gaming-mouse-wireless',
+        description: 'High-precision wireless gaming mouse with 25,600 DPI sensor and 80-hour battery life.',
+        shortDescription: 'Wireless gaming mouse with high DPI',
+        price: 89.99,
+        stock: 50,
+        sku: 'WGM-PRO-25K',
+        categoryId: categories[8].id, // peripherals
+        brand: 'MouseTech',
+        warranty: '2 years',
+        specifications: {
+          sensor: 'Optical 25,600 DPI',
+          connectivity: 'Wireless 2.4GHz',
+          battery: '80 hours',
+          weight: '85g',
+          buttons: 8
+        },
+        tags: ['Gaming', 'Mouse', 'Wireless', 'High DPI'],
+        featured: false,
+        isActive: true,
       },
     }),
   ])
