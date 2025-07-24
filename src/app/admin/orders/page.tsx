@@ -28,7 +28,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -45,14 +45,31 @@ import {
   Clock,
   ArrowUpDown,
   MoreHorizontal,
-  RefreshCw
+  RefreshCw,
+  Edit,
+  FileText,
+  MapPin,
+  ShoppingBag,
+  TrendingUp,
+  Users
 } from 'lucide-react'
-import { format } from 'date-fns'
 
 interface Order {
   id: string
-  status: 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED'
+  orderNumber: string
+  status: 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED'
+  subtotal: number
+  tax: number
+  shipping: number
+  discount: number
   total: number
+  currency: string
+  shippingMethod?: string
+  trackingNumber?: string
+  paymentStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+  paymentMethod?: string
+  customerNotes?: string
+  adminNotes?: string
   createdAt: string
   updatedAt: string
   user: {
@@ -60,7 +77,18 @@ interface Order {
     name: string
     email: string
   }
-  orderItems: Array<{
+  shippingAddress?: {
+    firstName: string
+    lastName: string
+    company?: string
+    addressLine1: string
+    addressLine2?: string
+    city: string
+    state: string
+    postalCode: string
+    country: string
+  }
+  items: Array<{
     id: string
     quantity: number
     price: number
@@ -74,11 +102,6 @@ interface Order {
       }>
     }
   }>
-  trackingNumber?: string
-  notes?: string
-  refundAmount?: number
-  refundReason?: string
-  refundedAt?: string
 }
 
 interface OrdersResponse {
@@ -106,69 +129,81 @@ export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedOrders, setSelectedOrders] = useState<string[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [dateFromFilter, setDateFromFilter] = useState('')
-  const [dateToFilter, setDateToFilter] = useState('')
-  const [sortBy, setSortBy] = useState('createdAt')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [page, setPage] = useState(1)
-  const [pagination, setPagination] = useState<any>(null)
-  const [insights, setInsights] = useState<any>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
-  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false)
+  const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false)
+  const [isUpdateStatusOpen, setIsUpdateStatusOpen] = useState(false)
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [sortBy, setSortBy] = useState('createdAt')
+  const [sortOrder, setSortOrder] = useState('desc')
+  const [insights, setInsights] = useState<any>({})
 
-  // Form state for bulk updates
-  const [bulkUpdateData, setBulkUpdateData] = useState({
-    status: '' as Order['status'] | '',
+  // Update status form
+  const [updateData, setUpdateData] = useState({
+    status: '',
     trackingNumber: '',
+    shippingMethod: '',
     notes: ''
   })
 
-  // Form state for refunds
-  const [refundData, setRefundData] = useState({
-    amount: 0,
-    reason: ''
-  })
+  // Admin notes form
+  const [adminNotes, setAdminNotes] = useState('')
 
-  const fetchOrders = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '20',
-        sortBy,
-        sortOrder,
-        ...(searchTerm && { search: searchTerm }),
-        ...(statusFilter !== 'all' && { status: statusFilter }),
-        ...(dateFromFilter && { dateFrom: dateFromFilter }),
-        ...(dateToFilter && { dateTo: dateToFilter })
-      })
-
-      const response = await fetch(`/api/admin/orders?${params}`)
-      
-      if (response.ok) {
-        const data: OrdersResponse = await response.json()
-        setOrders(data.orders)
-        setPagination(data.pagination)
-        setInsights(data.insights)
-      } else {
-        const errorData = await response.json()
-        console.error('Failed to fetch orders:', errorData.error || 'Unknown error')
-      }
-    } catch (error) {
-      console.error('Error fetching orders:', error)
-    }
-    setLoading(false)
+  const statusColors = {
+    PENDING: 'bg-yellow-100 text-yellow-800',
+    CONFIRMED: 'bg-blue-100 text-blue-800',
+    PROCESSING: 'bg-purple-100 text-purple-800',
+    SHIPPED: 'bg-green-100 text-green-800',
+    DELIVERED: 'bg-green-100 text-green-800',
+    CANCELLED: 'bg-red-100 text-red-800'
   }
 
-  useEffect(() => {
-    fetchOrders()
-  }, [page, sortBy, sortOrder, searchTerm, statusFilter, dateFromFilter, dateToFilter])
+  const statusIcons = {
+    PENDING: Clock,
+    CONFIRMED: CheckCircle,
+    PROCESSING: Package,
+    SHIPPED: Truck,
+    DELIVERED: CheckCircle,
+    CANCELLED: AlertCircle
+  }
 
-  const handleBulkStatusUpdate = async () => {
-    if (selectedOrders.length === 0 || !bulkUpdateData.status) return
+  const paymentStatusColors = {
+    PENDING: 'bg-yellow-100 text-yellow-800',
+    PROCESSING: 'bg-blue-100 text-blue-800',
+    COMPLETED: 'bg-green-100 text-green-800',
+    FAILED: 'bg-red-100 text-red-800',
+    CANCELLED: 'bg-gray-100 text-gray-800'
+  }
+
+  const fetchOrders = async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: '20',
+        sortBy,
+        sortOrder
+      })
+
+      if (statusFilter) params.append('status', statusFilter)
+      if (searchTerm) params.append('search', searchTerm)
+
+      const response = await fetch(`/api/admin/orders?${params}`)
+      const data: OrdersResponse = await response.json()
+      
+      setOrders(data.orders)
+      setInsights(data.insights)
+    } catch (error) {
+      console.error('Failed to fetch orders:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUpdateStatus = async () => {
+    if (!updateData.status || selectedOrders.length === 0) return
 
     try {
       const response = await fetch('/api/admin/orders', {
@@ -178,28 +213,31 @@ export default function AdminOrdersPage() {
         },
         body: JSON.stringify({
           orderIds: selectedOrders,
-          status: bulkUpdateData.status,
-          trackingNumber: bulkUpdateData.trackingNumber,
-          notes: bulkUpdateData.notes
+          status: updateData.status,
+          trackingNumber: updateData.trackingNumber,
+          shippingMethod: updateData.shippingMethod,
+          notes: updateData.notes
         })
       })
 
       if (response.ok) {
+        await fetchOrders()
+        setIsUpdateStatusOpen(false)
         setSelectedOrders([])
-        setBulkUpdateData({ status: '', trackingNumber: '', notes: '' })
-        setIsUpdateModalOpen(false)
-        fetchOrders()
+        setUpdateData({ status: '', trackingNumber: '', shippingMethod: '', notes: '' })
+        alert('Order status updated successfully')
       } else {
         const data = await response.json()
-        console.error('Failed to update orders:', data.error)
+        alert(`Failed to update status: ${data.error}`)
       }
     } catch (error) {
-      console.error('Error updating orders:', error)
+      console.error('Error updating status:', error)
+      alert('Failed to update status')
     }
   }
 
-  const handleRefund = async () => {
-    if (!selectedOrder) return
+  const handleAddNotes = async () => {
+    if (!selectedOrder || !adminNotes.trim()) return
 
     try {
       const response = await fetch('/api/admin/orders', {
@@ -209,541 +247,564 @@ export default function AdminOrdersPage() {
         },
         body: JSON.stringify({
           orderId: selectedOrder.id,
-          amount: refundData.amount || selectedOrder.total,
-          reason: refundData.reason
+          notes: adminNotes
         })
       })
 
       if (response.ok) {
-        setIsRefundModalOpen(false)
-        setRefundData({ amount: 0, reason: '' })
-        setSelectedOrder(null)
-        fetchOrders()
+        await fetchOrders()
+        setIsNotesModalOpen(false)
+        setAdminNotes('')
+        alert('Admin notes added successfully')
       } else {
         const data = await response.json()
-        console.error('Failed to process refund:', data.error)
+        alert(`Failed to add notes: ${data.error}`)
       }
     } catch (error) {
-      console.error('Error processing refund:', error)
+      console.error('Error adding notes:', error)
+      alert('Failed to add notes')
     }
   }
 
-  const getStatusColor = (status: Order['status']) => {
-    switch (status) {
-      case 'PENDING':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'CONFIRMED':
-        return 'bg-blue-100 text-blue-800'
-      case 'PROCESSING':
-        return 'bg-purple-100 text-purple-800'
-      case 'SHIPPED':
-        return 'bg-indigo-100 text-indigo-800'
-      case 'DELIVERED':
-        return 'bg-green-100 text-green-800'
-      case 'CANCELLED':
-        return 'bg-gray-100 text-gray-800'
-      case 'REFUNDED':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
+  const handleSelectOrder = (orderId: string) => {
+    setSelectedOrders(prev => 
+      prev.includes(orderId) 
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    )
   }
 
-  const getStatusIcon = (status: Order['status']) => {
-    switch (status) {
-      case 'PENDING':
-        return <Clock className="h-3 w-3" />
-      case 'CONFIRMED':
-        return <CheckCircle className="h-3 w-3" />
-      case 'PROCESSING':
-        return <Package className="h-3 w-3" />
-      case 'SHIPPED':
-        return <Truck className="h-3 w-3" />
-      case 'DELIVERED':
-        return <CheckCircle className="h-3 w-3" />
-      case 'CANCELLED':
-      case 'REFUNDED':
-        return <AlertCircle className="h-3 w-3" />
-      default:
-        return <Clock className="h-3 w-3" />
-    }
+  const handleSelectAll = () => {
+    setSelectedOrders(
+      selectedOrders.length === orders.length 
+        ? [] 
+        : orders.map(order => order.id)
+    )
   }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount)
+  }
+
+  useEffect(() => {
+    fetchOrders()
+  }, [currentPage, statusFilter, searchTerm, sortBy, sortOrder])
 
   return (
     <AdminLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-start">
+        {/* Page Header */}
+        <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold">Order Management</h1>
-            <p className="text-muted-foreground">
-              Process orders, update shipping status, and manage refunds
+            <p className="text-gray-600 mt-1">
+              Monitor and manage customer orders, update shipping status, and track fulfillment
             </p>
           </div>
-          
-          <Button onClick={fetchOrders} variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <Button onClick={fetchOrders} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
 
-        {/* Insights Cards */}
-        {insights && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  ${typeof insights.totalRevenue === 'number' 
-                    ? insights.totalRevenue.toFixed(2) 
-                    : Number(insights.totalRevenue || 0).toFixed(2)}
+        {/* Metrics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Orders</p>
+                  <p className="text-2xl font-bold">{insights.totalOrders || 0}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Average: ${typeof insights.averageOrderValue === 'number' 
-                    ? insights.averageOrderValue.toFixed(2) 
-                    : Number(insights.averageOrderValue || 0).toFixed(2)}
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pending Orders</CardTitle>
-                <Clock className="h-4 w-4 text-yellow-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-yellow-600">{insights.pendingCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Need processing
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-                <Package className="h-4 w-4 text-purple-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-600">{insights.processingCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Being processed
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Shipped Today</CardTitle>
-                <Truck className="h-4 w-4 text-blue-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{insights.shippedCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Out for delivery
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                <ShoppingBag className="h-8 w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Filters and Search */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                  <p className="text-2xl font-bold">{formatCurrency(insights.totalRevenue || 0)}</p>
+                </div>
+                <DollarSign className="h-8 w-8 text-green-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Pending Orders</p>
+                  <p className="text-2xl font-bold">{insights.pendingCount || 0}</p>
+                </div>
+                <Clock className="h-8 w-8 text-yellow-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Average Order Value</p>
+                  <p className="text-2xl font-bold">{formatCurrency(insights.averageOrderValue || 0)}</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-purple-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters and Actions */}
         <Card>
           <CardContent className="p-6">
-            <div className="grid gap-4 md:grid-cols-6">
-              <div className="md:col-span-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
-                    placeholder="Search orders, customers..."
+                    placeholder="Search orders, customers, or order numbers..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
                   />
                 </div>
+                <Select value={statusFilter || "ALL"} onValueChange={(value) => setStatusFilter(value === "ALL" ? "" : value)}>
+                  <SelectTrigger className="w-full sm:w-48">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Statuses</SelectItem>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="CONFIRMED">Confirmed</SelectItem>
+                    <SelectItem value="PROCESSING">Processing</SelectItem>
+                    <SelectItem value="SHIPPED">Shipped</SelectItem>
+                    <SelectItem value="DELIVERED">Delivered</SelectItem>
+                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="PENDING">Pending</SelectItem>
-                  <SelectItem value="CONFIRMED">Confirmed</SelectItem>
-                  <SelectItem value="PROCESSING">Processing</SelectItem>
-                  <SelectItem value="SHIPPED">Shipped</SelectItem>
-                  <SelectItem value="DELIVERED">Delivered</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                  <SelectItem value="REFUNDED">Refunded</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <div>
-                <Input
-                  type="date"
-                  placeholder="From date"
-                  value={dateFromFilter}
-                  onChange={(e) => setDateFromFilter(e.target.value)}
-                />
-              </div>
-              
-              <div>
-                <Input
-                  type="date"
-                  placeholder="To date"
-                  value={dateToFilter}
-                  onChange={(e) => setDateToFilter(e.target.value)}
-                />
-              </div>
-              
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm('')
-                  setStatusFilter('all')
-                  setDateFromFilter('')
-                  setDateToFilter('')
-                }}
-              >
-                Clear Filters
-              </Button>
+              {selectedOrders.length > 0 && (
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => setIsUpdateStatusOpen(true)}
+                    variant="outline"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Update Status ({selectedOrders.length})
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
-
-        {/* Bulk Actions */}
-        {selectedOrders.length > 0 && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  {selectedOrders.length} orders selected
-                </span>
-                <div className="flex space-x-2">
-                  <Dialog open={isUpdateModalOpen} onOpenChange={setIsUpdateModalOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        Update Status
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Update Order Status</DialogTitle>
-                        <DialogDescription>
-                          Update status for {selectedOrders.length} selected orders
-                        </DialogDescription>
-                      </DialogHeader>
-                      
-                      <div className="grid gap-4 py-4">
-                        <div>
-                          <Label htmlFor="bulk-status">New Status</Label>
-                          <Select
-                            value={bulkUpdateData.status}
-                            onValueChange={(value) => setBulkUpdateData(prev => ({ ...prev, status: value as Order['status'] }))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="CONFIRMED">Confirmed</SelectItem>
-                              <SelectItem value="PROCESSING">Processing</SelectItem>
-                              <SelectItem value="SHIPPED">Shipped</SelectItem>
-                              <SelectItem value="DELIVERED">Delivered</SelectItem>
-                              <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        {bulkUpdateData.status === 'SHIPPED' && (
-                          <div>
-                            <Label htmlFor="tracking">Tracking Number</Label>
-                            <Input
-                              id="tracking"
-                              value={bulkUpdateData.trackingNumber}
-                              onChange={(e) => setBulkUpdateData(prev => ({ ...prev, trackingNumber: e.target.value }))}
-                              placeholder="Enter tracking number"
-                            />
-                          </div>
-                        )}
-                        
-                        <div>
-                          <Label htmlFor="bulk-notes">Notes (Optional)</Label>
-                          <Textarea
-                            id="bulk-notes"
-                            value={bulkUpdateData.notes}
-                            onChange={(e) => setBulkUpdateData(prev => ({ ...prev, notes: e.target.value }))}
-                            placeholder="Add notes..."
-                            rows={3}
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="flex justify-end space-x-2">
-                        <Button variant="outline" onClick={() => setIsUpdateModalOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button onClick={handleBulkStatusUpdate}>
-                          Update Orders
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                  
-                  <Button 
-                    variant="destructive" 
-                    size="sm"
-                    onClick={() => setSelectedOrders([])}
-                  >
-                    Clear Selection
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Orders Table */}
         <Card>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={orders.length > 0 && selectedOrders.length === orders.length}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedOrders(orders.map(o => o.id))
-                        } else {
-                          setSelectedOrders([])
-                        }
-                      }}
-                    />
-                  </TableHead>
-                  <TableHead>Order ID</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Items</TableHead>
-                  <TableHead>
-                    <Button variant="ghost" className="h-auto p-0 font-medium">
-                      Total <ArrowUpDown className="ml-1 h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>
-                    <Button variant="ghost" className="h-auto p-0 font-medium">
-                      Date <ArrowUpDown className="ml-1 h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
-                      Loading orders...
-                    </TableCell>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedOrders.length === orders.length && orders.length > 0}
+                        onCheckedChange={handleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>Order</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ) : orders.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
-                      No orders found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  orders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedOrders.includes(order.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedOrders(prev => [...prev, order.id])
-                            } else {
-                              setSelectedOrders(prev => prev.filter(id => id !== order.id))
-                            }
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">#{order.id.slice(-8)}</div>
-                        {order.trackingNumber && (
-                          <div className="text-sm text-muted-foreground">
-                            Track: {order.trackingNumber}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{order.user.name}</p>
-                          <p className="text-sm text-muted-foreground">{order.user.email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {order.orderItems.slice(0, 2).map((item) => (
-                            <div key={item.id} className="text-sm">
-                              {item.quantity}x {item.product.name}
-                            </div>
-                          ))}
-                          {order.orderItems.length > 2 && (
-                            <div className="text-xs text-muted-foreground">
-                              +{order.orderItems.length - 2} more items
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">${Number(order.total).toFixed(2)}</div>
-                        {order.refundAmount && (
-                          <div className="text-sm text-red-600">
-                            Refunded: ${Number(order.refundAmount).toFixed(2)}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="secondary" 
-                          className={`${getStatusColor(order.status)} flex items-center gap-1 w-fit`}
-                        >
-                          {getStatusIcon(order.status)}
-                          {order.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {format(new Date(order.createdAt), 'MMM dd, yyyy')}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {format(new Date(order.createdAt), 'HH:mm')}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex space-x-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              // TODO: Open order details modal
-                              console.log('View order details:', order.id)
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {(order.status === 'DELIVERED' || order.status === 'SHIPPED') && !order.refundAmount && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedOrder(order)
-                                setRefundData({ amount: Number(order.total), reason: '' })
-                                setIsRefundModalOpen(true)
-                              }}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <DollarSign className="h-4 w-4" />
-                            </Button>
-                          )}
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <div className="flex items-center justify-center">
+                          <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                          Loading orders...
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : orders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <div className="flex flex-col items-center">
+                          <ShoppingBag className="h-12 w-12 text-gray-400 mb-4" />
+                          <p className="text-lg font-medium text-gray-900">No orders found</p>
+                          <p className="text-gray-500">No orders match your current filters.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    orders.map((order) => {
+                      const StatusIcon = statusIcons[order.status]
+                      return (
+                        <TableRow key={order.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedOrders.includes(order.id)}
+                              onCheckedChange={() => handleSelectOrder(order.id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <p className="font-medium">#{order.orderNumber || order.id.slice(-8)}</p>
+                              <p className="text-sm text-gray-500">{order.items.length} items</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <p className="font-medium">{order.user.name || 'N/A'}</p>
+                              <p className="text-sm text-gray-500">{order.user.email}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={statusColors[order.status]}>
+                              <StatusIcon className="h-3 w-3 mr-1" />
+                              {order.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={paymentStatusColors[order.paymentStatus]}>
+                              {order.paymentStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {formatCurrency(order.total)}
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-500">
+                            {formatDate(order.createdAt)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedOrder(order)
+                                  setIsOrderDetailOpen(true)
+                                }}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedOrder(order)
+                                  setAdminNotes(order.adminNotes || '')
+                                  setIsNotesModalOpen(true)
+                                }}
+                              >
+                                <FileText className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Pagination */}
-        {pagination && pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
-              {Math.min(pagination.page * pagination.limit, pagination.totalCount)} of{' '}
-              {pagination.totalCount} orders
-            </p>
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!pagination.hasPrevPage}
-                onClick={() => setPage(page - 1)}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!pagination.hasNextPage}
-                onClick={() => setPage(page + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Refund Modal */}
-        <Dialog open={isRefundModalOpen} onOpenChange={setIsRefundModalOpen}>
-          <DialogContent>
+        {/* Order Detail Modal */}
+        <Dialog open={isOrderDetailOpen} onOpenChange={setIsOrderDetailOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Process Refund</DialogTitle>
-              <DialogDescription>
-                Process a refund for order #{selectedOrder?.id.slice(-8)}
-              </DialogDescription>
+              <DialogTitle>Order Details - #{selectedOrder?.orderNumber || selectedOrder?.id.slice(-8)}</DialogTitle>
             </DialogHeader>
             
             {selectedOrder && (
-              <div className="grid gap-4 py-4">
-                <div>
-                  <Label>Order Total</Label>
-                  <div className="text-lg font-medium">${Number(selectedOrder.total).toFixed(2)}</div>
+              <div className="space-y-6">
+                {/* Order Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-medium mb-2">Order Information</h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Status:</span>
+                          <Badge className={statusColors[selectedOrder.status]}>
+                            {selectedOrder.status}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Payment:</span>
+                          <Badge className={paymentStatusColors[selectedOrder.paymentStatus]}>
+                            {selectedOrder.paymentStatus}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Order Date:</span>
+                          <span>{formatDate(selectedOrder.createdAt)}</span>
+                        </div>
+                        {selectedOrder.trackingNumber && (
+                          <div className="flex justify-between">
+                            <span>Tracking:</span>
+                            <span className="font-mono">{selectedOrder.trackingNumber}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-medium mb-2">Customer</h3>
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium">{selectedOrder.user.name}</p>
+                        <p className="text-gray-600">{selectedOrder.user.email}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {selectedOrder.shippingAddress && (
+                      <div>
+                        <h3 className="font-medium mb-2">Shipping Address</h3>
+                        <div className="text-sm space-y-1">
+                          <p>{selectedOrder.shippingAddress.firstName} {selectedOrder.shippingAddress.lastName}</p>
+                          {selectedOrder.shippingAddress.company && (
+                            <p>{selectedOrder.shippingAddress.company}</p>
+                          )}
+                          <p>{selectedOrder.shippingAddress.addressLine1}</p>
+                          {selectedOrder.shippingAddress.addressLine2 && (
+                            <p>{selectedOrder.shippingAddress.addressLine2}</p>
+                          )}
+                          <p>
+                            {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state} {selectedOrder.shippingAddress.postalCode}
+                          </p>
+                          <p>{selectedOrder.shippingAddress.country}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <h3 className="font-medium mb-2">Order Total</h3>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span>Subtotal:</span>
+                          <span>{formatCurrency(selectedOrder.subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Tax:</span>
+                          <span>{formatCurrency(selectedOrder.tax)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Shipping:</span>
+                          <span>{formatCurrency(selectedOrder.shipping)}</span>
+                        </div>
+                        {selectedOrder.discount > 0 && (
+                          <div className="flex justify-between">
+                            <span>Discount:</span>
+                            <span>-{formatCurrency(selectedOrder.discount)}</span>
+                          </div>
+                        )}
+                        <hr />
+                        <div className="flex justify-between font-medium">
+                          <span>Total:</span>
+                          <span>{formatCurrency(selectedOrder.total)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                
+
+                {/* Order Items */}
                 <div>
-                  <Label htmlFor="refund-amount">Refund Amount</Label>
-                  <Input
-                    id="refund-amount"
-                    type="number"
-                    step="0.01"
-                    value={refundData.amount}
-                    onChange={(e) => setRefundData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
-                    max={Number(selectedOrder.total)}
-                  />
+                  <h3 className="font-medium mb-3">Order Items</h3>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product</TableHead>
+                          <TableHead>Quantity</TableHead>
+                          <TableHead>Price</TableHead>
+                          <TableHead>Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedOrder.items.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>
+                              <div className="flex items-center space-x-3">
+                                {item.product.images[0] && (
+                                  <img
+                                    src={item.product.images[0].url}
+                                    alt={item.product.name}
+                                    className="w-12 h-12 object-cover rounded"
+                                  />
+                                )}
+                                <div>
+                                  <p className="font-medium">{item.product.name}</p>
+                                  <p className="text-sm text-gray-500">SKU: {item.product.slug}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{item.quantity}</TableCell>
+                            <TableCell>{formatCurrency(item.price)}</TableCell>
+                            <TableCell>{formatCurrency(item.price * item.quantity)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
-                
-                <div>
-                  <Label htmlFor="refund-reason">Refund Reason</Label>
-                  <Textarea
-                    id="refund-reason"
-                    value={refundData.reason}
-                    onChange={(e) => setRefundData(prev => ({ ...prev, reason: e.target.value }))}
-                    placeholder="Reason for refund..."
-                    rows={3}
-                  />
-                </div>
+
+                {/* Notes */}
+                {(selectedOrder.customerNotes || selectedOrder.adminNotes) && (
+                  <div className="space-y-4">
+                    {selectedOrder.customerNotes && (
+                      <div>
+                        <h3 className="font-medium mb-2">Customer Notes</h3>
+                        <p className="text-sm bg-gray-50 p-3 rounded border">
+                          {selectedOrder.customerNotes}
+                        </p>
+                      </div>
+                    )}
+                    {selectedOrder.adminNotes && (
+                      <div>
+                        <h3 className="font-medium mb-2">Admin Notes</h3>
+                        <p className="text-sm bg-blue-50 p-3 rounded border">
+                          {selectedOrder.adminNotes}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Update Status Modal */}
+        <Dialog open={isUpdateStatusOpen} onOpenChange={setIsUpdateStatusOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Update Order Status</DialogTitle>
+              <DialogDescription>
+                Update the status for {selectedOrders.length} selected order(s).
+              </DialogDescription>
+            </DialogHeader>
             
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setIsRefundModalOpen(false)}>
+            <div className="space-y-4">
+              <div>
+                <Label>New Status</Label>
+                <Select value={updateData.status} onValueChange={(value) => setUpdateData(prev => ({ ...prev, status: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="CONFIRMED">Confirmed</SelectItem>
+                    <SelectItem value="PROCESSING">Processing</SelectItem>
+                    <SelectItem value="SHIPPED">Shipped</SelectItem>
+                    <SelectItem value="DELIVERED">Delivered</SelectItem>
+                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {updateData.status === 'SHIPPED' && (
+                <>
+                  <div>
+                    <Label>Tracking Number</Label>
+                    <Input
+                      value={updateData.trackingNumber}
+                      onChange={(e) => setUpdateData(prev => ({ ...prev, trackingNumber: e.target.value }))}
+                      placeholder="Enter tracking number"
+                    />
+                  </div>
+                  <div>
+                    <Label>Shipping Method</Label>
+                    <Input
+                      value={updateData.shippingMethod}
+                      onChange={(e) => setUpdateData(prev => ({ ...prev, shippingMethod: e.target.value }))}
+                      placeholder="e.g., FedEx Ground, UPS Next Day"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <Label>Admin Notes (Optional)</Label>
+                <Textarea
+                  value={updateData.notes}
+                  onChange={(e) => setUpdateData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Add any internal notes about this update..."
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsUpdateStatusOpen(false)}>
                 Cancel
               </Button>
-              <Button 
-                onClick={handleRefund}
-                className="bg-red-600 hover:bg-red-700"
-                disabled={!refundData.reason.trim()}
-              >
-                Process Refund
+              <Button onClick={handleUpdateStatus} disabled={!updateData.status}>
+                Update Status
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Admin Notes Modal */}
+        <Dialog open={isNotesModalOpen} onOpenChange={setIsNotesModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Admin Notes</DialogTitle>
+              <DialogDescription>
+                Add internal notes for order #{selectedOrder?.orderNumber || selectedOrder?.id.slice(-8)}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div>
+                <Label>Admin Notes</Label>
+                <Textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  placeholder="Add internal notes about this order..."
+                  rows={4}
+                />
+              </div>
             </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsNotesModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddNotes} disabled={!adminNotes.trim()}>
+                Add Notes
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
     </AdminLayout>
   )
-} 
+}

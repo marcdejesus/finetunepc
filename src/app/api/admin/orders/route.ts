@@ -7,13 +7,8 @@ const updateOrderStatusSchema = z.object({
   orderIds: z.array(z.string()),
   status: z.enum(['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']),
   trackingNumber: z.string().optional(),
+  shippingMethod: z.string().optional(),
   notes: z.string().optional(),
-})
-
-const refundSchema = z.object({
-  orderId: z.string(),
-  amount: z.number().positive().optional(), // If not provided, full refund
-  reason: z.string().min(5, 'Refund reason is required'),
 })
 
 // GET - Fetch orders with admin details
@@ -84,7 +79,7 @@ export async function GET(request: NextRequest) {
               email: true
             }
           },
-          orderItems: {
+          items: {
             include: {
               product: {
                 select: {
@@ -101,6 +96,19 @@ export async function GET(request: NextRequest) {
                   }
                 }
               }
+            }
+          },
+          shippingAddress: {
+            select: {
+              firstName: true,
+              lastName: true,
+              company: true,
+              addressLine1: true,
+              addressLine2: true,
+              city: true,
+              state: true,
+              postalCode: true,
+              country: true
             }
           }
         }
@@ -123,7 +131,7 @@ export async function GET(request: NextRequest) {
       prisma.order.count({ where: { status: 'PROCESSING' } }),
       prisma.order.count({ where: { status: 'SHIPPED' } }),
       prisma.order.aggregate({
-        where: { status: 'COMPLETED' },
+        where: { status: 'DELIVERED' },
         _sum: { total: true }
       }),
       prisma.order.count({
@@ -146,7 +154,7 @@ export async function GET(request: NextRequest) {
       shipping: Number(order.shipping),
       discount: Number(order.discount),
       total: Number(order.total),
-      orderItems: order.orderItems.map(item => ({
+      items: order.items.map(item => ({
         ...item,
         price: Number(item.price)
       }))
@@ -212,8 +220,12 @@ export async function PATCH(request: NextRequest) {
       updateData.trackingNumber = validatedData.trackingNumber
     }
 
+    if (validatedData.shippingMethod) {
+      updateData.shippingMethod = validatedData.shippingMethod
+    }
+
     if (validatedData.notes) {
-      updateData.notes = validatedData.notes
+      updateData.adminNotes = validatedData.notes
     }
 
     const updatedOrders = await prisma.order.updateMany({
@@ -282,90 +294,92 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// POST - Process refund
+// POST - Add admin notes to order
 export async function POST(request: NextRequest) {
   try {
+    console.log('[ADMIN_ORDERS_POST] Adding admin notes...')
+    
     const session = await auth()
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
-    const validatedData = refundSchema.parse(body)
+    const { orderId, notes } = body
 
-    const order = await prisma.order.findUnique({
-      where: { id: validatedData.orderId },
+    if (!orderId || !notes) {
+      return NextResponse.json({ error: 'Order ID and notes are required' }, { status: 400 })
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        adminNotes: notes,
+        updatedAt: new Date()
+      },
       include: {
         user: {
           select: {
-            email: true,
-            name: true
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                images: {
+                  select: {
+                    url: true,
+                    altText: true
+                  },
+                  take: 1,
+                  orderBy: { position: 'asc' }
+                }
+              }
+            }
+          }
+        },
+        shippingAddress: {
+          select: {
+            firstName: true,
+            lastName: true,
+            company: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            state: true,
+            postalCode: true,
+            country: true
           }
         }
       }
     })
 
-    if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
-    }
-
-    if (order.status === 'CANCELLED' || order.status === 'REFUNDED') {
-      return NextResponse.json(
-        { error: 'Order is already cancelled or refunded' },
-        { status: 400 }
-      )
-    }
-
-    const refundAmount = validatedData.amount || Number(order.total)
-
-    // Update order status
-    const updatedOrder = await prisma.order.update({
-      where: { id: validatedData.orderId },
-      data: {
-        status: 'REFUNDED',
-        refundAmount: refundAmount,
-        refundReason: validatedData.reason,
-        refundedAt: new Date(),
-        updatedAt: new Date()
-      }
-    })
-
-    // TODO: Process actual refund with Stripe
-    // Here you would integrate with Stripe's refund API
-
-    // Send refund confirmation email
-    try {
-      await fetch(`${process.env.NEXTAUTH_URL}/api/emails/order-refunded`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          orderId: order.id,
-          userEmail: order.user.email,
-          userName: order.user.name,
-          refundAmount,
-          reason: validatedData.reason
-        })
-      })
-    } catch (emailError) {
-      console.error('Error sending refund email:', emailError)
+    // Convert Decimal fields to numbers
+    const orderWithNumbers = {
+      ...updatedOrder,
+      subtotal: Number(updatedOrder.subtotal),
+      tax: Number(updatedOrder.tax),
+      shipping: Number(updatedOrder.shipping),
+      discount: Number(updatedOrder.discount),
+      total: Number(updatedOrder.total),
+      items: updatedOrder.items.map(item => ({
+        ...item,
+        price: Number(item.price)
+      }))
     }
 
     return NextResponse.json({
-      message: 'Refund processed successfully',
-      order: updatedOrder,
-      refundAmount
+      message: 'Admin notes added successfully',
+      order: orderWithNumbers
     })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
-        { status: 400 }
-      )
-    }
-
-    console.error('Error processing refund:', error)
+    console.error('Error adding admin notes:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
