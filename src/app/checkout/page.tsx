@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { useCartStore } from '@/store/cart-store'
+import { PageContainer, PageHeader, PageTitle } from '@/components/layout/page-container'
 import { Loader2, CreditCard, Truck, Shield, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -220,17 +221,18 @@ export default function CheckoutPage() {
   }
   
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <Button variant="ghost" asChild className="mb-4">
+    <PageContainer>
+      <PageHeader>
+        <Button variant="ghost" asChild className="mb-6">
           <Link href="/products">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Continue Shopping
           </Link>
         </Button>
-        <h1 className="text-3xl font-bold">Checkout</h1>
-        <p className="text-muted-foreground">Review your order and complete your purchase</p>
-      </div>
+        <PageTitle subtitle="Review your order and complete your purchase">
+          Checkout
+        </PageTitle>
+      </PageHeader>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Shipping Information */}
@@ -469,6 +471,6 @@ export default function CheckoutPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </PageContainer>
   )
 } 

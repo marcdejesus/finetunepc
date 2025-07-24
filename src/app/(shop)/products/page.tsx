@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ProductGrid } from '@/components/products/product-grid'
 import { ProductFilters } from '@/components/products/product-filters'
+import { PageContainer, PageHeader, PageTitle } from '@/components/layout/page-container'
 import { Search, Loader2 } from 'lucide-react'
 
 interface Product {
@@ -210,13 +211,14 @@ function ProductsPageContent() {
   }, [searchParams])
   
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Products</h1>
+    <PageContainer>
+      <PageHeader>
+        <PageTitle subtitle="Discover premium computer components, parts, and accessories from trusted brands">
+          Products
+        </PageTitle>
         
         {/* Search Bar */}
-        <form onSubmit={handleSearch} className="max-w-md">
+        <form onSubmit={handleSearch} className="max-w-md mt-6">
           <div className="relative">
             <Input
               type="text"
@@ -235,9 +237,9 @@ function ProductsPageContent() {
             </Button>
           </div>
         </form>
-      </div>
+      </PageHeader>
       
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
         {/* Filters Sidebar */}
         <div className="lg:col-span-1">
           <ProductFilters
@@ -324,24 +326,24 @@ function ProductsPageContent() {
           )}
         </div>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 
 // Loading component for Suspense boundary
 function ProductsPageLoading() {
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Products</h1>
-        <div className="max-w-md">
+    <PageContainer>
+      <PageHeader>
+        <PageTitle>Products</PageTitle>
+        <div className="max-w-md mt-6">
           <div className="relative">
             <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
           </div>
         </div>
-      </div>
+      </PageHeader>
       
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
         <div className="lg:col-span-1">
           <div className="h-96 bg-gray-200 rounded animate-pulse"></div>
         </div>
@@ -351,7 +353,7 @@ function ProductsPageLoading() {
           </div>
         </div>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

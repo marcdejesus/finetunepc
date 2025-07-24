@@ -23,33 +23,34 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center">
-        {/* Logo */}
-        <Link href="/" className="mr-6 flex items-center space-x-2">
-          <Wrench className="h-6 w-6" />
-          <span className="hidden font-bold sm:inline-block">
-            Fine Tune PC
-          </span>
-        </Link>
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between">
+          {/* Logo */}
+          <Link href="/" className="flex items-center space-x-2">
+            <Wrench className="h-6 w-6" />
+            <span className="hidden font-bold sm:inline-block">
+              Fine Tune PC
+            </span>
+          </Link>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex md:flex-1 md:items-center md:justify-center">
-          <ul className="flex space-x-8">
-            {navigation.map((item) => (
-              <li key={item.name}>
-                <Link
-                  href={item.href}
-                  className="text-sm font-medium transition-colors hover:text-primary"
-                >
-                  {item.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex md:flex-1 md:items-center md:justify-center md:mx-8">
+            <ul className="flex space-x-8">
+              {navigation.map((item) => (
+                <li key={item.name}>
+                  <Link
+                    href={item.href}
+                    className="text-sm font-medium transition-colors hover:text-primary"
+                  >
+                    {item.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
-        {/* Right Side Actions */}
-        <div className="flex items-center space-x-4">
+          {/* Right Side Actions */}
+          <div className="flex items-center space-x-3 sm:space-x-4">
           {/* Cart */}
           <CartDrawer />
 
@@ -136,6 +137,7 @@ export function Header() {
               </nav>
             </SheetContent>
           </Sheet>
+          </div>
         </div>
       </div>
     </header>

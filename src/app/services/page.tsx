@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageContainer, PageHeader, PageTitle, ResponsiveGrid } from '@/components/layout/page-container'
 import { 
   Calendar, 
   Clock, 
@@ -152,25 +153,21 @@ export default function ServicesPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">My Services</h1>
-            <p className="text-muted-foreground">
-              Manage your computer service bookings and appointments
-            </p>
-          </div>
+    <PageContainer>
+      <PageHeader>
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          <PageTitle subtitle="Manage your computer service bookings and appointments">
+            My Services
+          </PageTitle>
           <Button 
             onClick={() => router.push('/services/book')}
-            className="mt-4 md:mt-0"
+            className="w-full md:w-auto"
           >
             <Plus className="w-4 h-4 mr-2" />
             Book New Service
           </Button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Service Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -321,6 +318,6 @@ export default function ServicesPage() {
           </Tabs>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   )
 } 
