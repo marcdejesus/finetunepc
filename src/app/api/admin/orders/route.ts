@@ -1,0 +1,344 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { z } from 'zod'
+
+const updateOrderStatusSchema = z.object({
+  orderIds: z.array(z.string()),
+  status: z.enum(['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']),
+  trackingNumber: z.string().optional(),
+  notes: z.string().optional(),
+})
+
+const refundSchema = z.object({
+  orderId: z.string(),
+  amount: z.number().positive().optional(), // If not provided, full refund
+  reason: z.string().min(5, 'Refund reason is required'),
+})
+
+// GET - Fetch orders with admin details
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const status = searchParams.get('status')
+    const search = searchParams.get('search') // customer name or email
+    const dateFrom = searchParams.get('dateFrom')
+    const dateTo = searchParams.get('dateTo')
+    const sortBy = searchParams.get('sortBy') || 'createdAt'
+    const sortOrder = searchParams.get('sortOrder') || 'desc'
+
+    const skip = (page - 1) * limit
+
+    // Build where clause
+    const where: any = {}
+
+    if (status) {
+      where.status = status
+    }
+
+    if (search) {
+      where.OR = [
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { id: { contains: search, mode: 'insensitive' } }
+      ]
+    }
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {}
+      if (dateFrom) {
+        where.createdAt.gte = new Date(dateFrom)
+      }
+      if (dateTo) {
+        where.createdAt.lte = new Date(dateTo)
+      }
+    }
+
+    // Build orderBy
+    const orderBy: any = {}
+    orderBy[sortBy] = sortOrder
+
+    const [orders, totalCount] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          orderItems: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  images: {
+                    select: {
+                      url: true,
+                      altText: true
+                    },
+                    take: 1,
+                    orderBy: { position: 'asc' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }),
+      prisma.order.count({ where })
+    ])
+
+    const totalPages = Math.ceil(totalCount / limit)
+
+    // Calculate order insights
+    const [
+      pendingCount,
+      processingCount,
+      shippedCount,
+      totalRevenue,
+      todayOrders,
+      averageOrderValue
+    ] = await Promise.all([
+      prisma.order.count({ where: { status: 'PENDING' } }),
+      prisma.order.count({ where: { status: 'PROCESSING' } }),
+      prisma.order.count({ where: { status: 'SHIPPED' } }),
+      prisma.order.aggregate({
+        where: { status: 'COMPLETED' },
+        _sum: { total: true }
+      }),
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0))
+          }
+        }
+      }),
+      prisma.order.aggregate({
+        _avg: { total: true }
+      })
+    ])
+
+    return NextResponse.json({
+      orders,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      },
+      insights: {
+        pendingCount,
+        processingCount,
+        shippedCount,
+        totalRevenue: Number(totalRevenue._sum.total || 0),
+        todayOrders,
+        averageOrderValue: Number(averageOrderValue._avg.total || 0),
+        totalOrders: totalCount
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching admin orders:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// PATCH - Update order status (bulk operation)
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const validatedData = updateOrderStatusSchema.parse(body)
+
+    const updateData: any = {
+      status: validatedData.status,
+      updatedAt: new Date()
+    }
+
+    if (validatedData.trackingNumber) {
+      updateData.trackingNumber = validatedData.trackingNumber
+    }
+
+    if (validatedData.notes) {
+      updateData.notes = validatedData.notes
+    }
+
+    const updatedOrders = await prisma.order.updateMany({
+      where: {
+        id: {
+          in: validatedData.orderIds
+        }
+      },
+      data: updateData
+    })
+
+    // If status is SHIPPED, send notification emails
+    if (validatedData.status === 'SHIPPED') {
+      const orders = await prisma.order.findMany({
+        where: {
+          id: { in: validatedData.orderIds }
+        },
+        include: {
+          user: {
+            select: {
+              email: true,
+              name: true
+            }
+          }
+        }
+      })
+
+      // TODO: Send shipping notification emails
+      for (const order of orders) {
+        try {
+          await fetch(`${process.env.NEXTAUTH_URL}/api/emails/order-shipped`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              orderId: order.id,
+              userEmail: order.user.email,
+              userName: order.user.name,
+              trackingNumber: validatedData.trackingNumber
+            })
+          })
+        } catch (emailError) {
+          console.error('Error sending shipping email:', emailError)
+        }
+      }
+    }
+
+    return NextResponse.json({
+      message: `Updated ${updatedOrders.count} orders`,
+      updatedCount: updatedOrders.count
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Validation error', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Error updating orders:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Process refund
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const validatedData = refundSchema.parse(body)
+
+    const order = await prisma.order.findUnique({
+      where: { id: validatedData.orderId },
+      include: {
+        user: {
+          select: {
+            email: true,
+            name: true
+          }
+        }
+      }
+    })
+
+    if (!order) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    if (order.status === 'CANCELLED' || order.status === 'REFUNDED') {
+      return NextResponse.json(
+        { error: 'Order is already cancelled or refunded' },
+        { status: 400 }
+      )
+    }
+
+    const refundAmount = validatedData.amount || Number(order.total)
+
+    // Update order status
+    const updatedOrder = await prisma.order.update({
+      where: { id: validatedData.orderId },
+      data: {
+        status: 'REFUNDED',
+        refundAmount: refundAmount,
+        refundReason: validatedData.reason,
+        refundedAt: new Date(),
+        updatedAt: new Date()
+      }
+    })
+
+    // TODO: Process actual refund with Stripe
+    // Here you would integrate with Stripe's refund API
+
+    // Send refund confirmation email
+    try {
+      await fetch(`${process.env.NEXTAUTH_URL}/api/emails/order-refunded`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          userEmail: order.user.email,
+          userName: order.user.name,
+          refundAmount,
+          reason: validatedData.reason
+        })
+      })
+    } catch (emailError) {
+      console.error('Error sending refund email:', emailError)
+    }
+
+    return NextResponse.json({
+      message: 'Refund processed successfully',
+      order: updatedOrder,
+      refundAmount
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Validation error', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Error processing refund:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+} 
