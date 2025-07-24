@@ -6,7 +6,7 @@ import { z } from 'zod'
 const createServiceSchema = z.object({
   type: z.enum(['REPAIR', 'UPGRADE', 'CONSULTATION', 'INSTALLATION', 'MAINTENANCE', 'DIAGNOSTICS']),
   title: z.string().min(1, 'Title is required'),
-  description: z.string().min(10, 'Description must be at least 10 characters'),
+  description: z.string().min(5, 'Description must be at least 5 characters'),
   scheduledDate: z.string().transform((str) => new Date(str)),
   deviceInfo: z.object({
     brand: z.string().optional(),

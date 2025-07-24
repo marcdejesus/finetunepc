@@ -176,6 +176,12 @@ export default function BookServicePage() {
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedSlot || !serviceType) return
+    
+    // Client-side validation
+    if (formData.description.length < 5) {
+      alert('Description must be at least 5 characters long')
+      return
+    }
 
     const requestData = {
       type: serviceType,
@@ -533,10 +539,21 @@ export default function BookServicePage() {
                       id="description"
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Detailed description of what you need help with"
+                      placeholder="Detailed description of what you need help with (minimum 5 characters)"
                       rows={4}
                       required
+                      className={formData.description.length > 0 && formData.description.length < 5 ? 'border-red-500' : ''}
                     />
+                    {formData.description.length > 0 && formData.description.length < 5 && (
+                      <p className="text-sm text-red-500 mt-1">
+                        Description must be at least 5 characters ({formData.description.length}/5)
+                      </p>
+                    )}
+                    {formData.description.length >= 5 && (
+                      <p className="text-sm text-green-600 mt-1">
+                        ✓ Description length is valid ({formData.description.length} characters)
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -645,7 +662,7 @@ export default function BookServicePage() {
                   <Button type="button" variant="outline" onClick={() => setStep(2)}>
                     Back
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || formData.description.length < 5}>
                     {submitting ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
