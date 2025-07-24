@@ -29,8 +29,13 @@ const bulkUpdateSchema = z.object({
 // GET - Fetch products with admin details
 export async function GET(request: NextRequest) {
   try {
+    console.log('[ADMIN_PRODUCTS_GET] Starting products fetch...')
+    
     const session = await auth()
+    console.log(`[ADMIN_PRODUCTS_GET] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
+    
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log('[ADMIN_PRODUCTS_GET] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -133,8 +138,19 @@ export async function GET(request: NextRequest) {
       where: { stock: { lte: 0 } }
     })
 
+    // Convert Decimal fields to numbers for frontend consumption
+    const productsWithNumbers = products.map(product => ({
+      ...product,
+      price: Number(product.price),
+      comparePrice: product.comparePrice ? Number(product.comparePrice) : null,
+      costPrice: product.costPrice ? Number(product.costPrice) : null,
+    }))
+
+    console.log(`[ADMIN_PRODUCTS_GET] Successfully fetched ${products.length} products for page ${page}`)
+    console.log(`[ADMIN_PRODUCTS_GET] Total products: ${totalCount}, Low stock: ${lowStockCount}, Out of stock: ${outOfStockCount}`)
+
     return NextResponse.json({
-      products,
+      products: productsWithNumbers,
       categories,
       pagination: {
         page,
@@ -162,13 +178,21 @@ export async function GET(request: NextRequest) {
 // POST - Create new product
 export async function POST(request: NextRequest) {
   try {
+    console.log('[ADMIN_PRODUCTS_POST] Creating new product...')
+    
     const session = await auth()
+    console.log(`[ADMIN_PRODUCTS_POST] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
+    
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log('[ADMIN_PRODUCTS_POST] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    console.log('[ADMIN_PRODUCTS_POST] Request body:', JSON.stringify(body, null, 2))
+    
     const validatedData = createProductSchema.parse(body)
+    console.log('[ADMIN_PRODUCTS_POST] Validated data:', JSON.stringify(validatedData, null, 2))
 
     // Check if slug already exists
     const existingProduct = await prisma.product.findUnique({
@@ -204,7 +228,17 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ product }, { status: 201 })
+    // Convert Decimal fields to numbers
+    const productWithNumbers = {
+      ...product,
+      price: Number(product.price),
+      comparePrice: product.comparePrice ? Number(product.comparePrice) : null,
+      costPrice: product.costPrice ? Number(product.costPrice) : null,
+    }
+
+    console.log(`[ADMIN_PRODUCTS_POST] Successfully created product: ${product.name} (${product.id})`)
+
+    return NextResponse.json({ product: productWithNumbers }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -224,13 +258,21 @@ export async function POST(request: NextRequest) {
 // PATCH - Bulk update products
 export async function PATCH(request: NextRequest) {
   try {
+    console.log('[ADMIN_PRODUCTS_PATCH] Bulk updating products...')
+    
     const session = await auth()
+    console.log(`[ADMIN_PRODUCTS_PATCH] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
+    
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log('[ADMIN_PRODUCTS_PATCH] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    console.log('[ADMIN_PRODUCTS_PATCH] Request body:', JSON.stringify(body, null, 2))
+    
     const validatedData = bulkUpdateSchema.parse(body)
+    console.log('[ADMIN_PRODUCTS_PATCH] Validated data:', JSON.stringify(validatedData, null, 2))
 
     const updatedProducts = await prisma.product.updateMany({
       where: {
@@ -240,6 +282,8 @@ export async function PATCH(request: NextRequest) {
       },
       data: validatedData.updates
     })
+
+    console.log(`[ADMIN_PRODUCTS_PATCH] Successfully updated ${updatedProducts.count} products`)
 
     return NextResponse.json({
       message: `Updated ${updatedProducts.count} products`,

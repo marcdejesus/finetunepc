@@ -51,7 +51,9 @@ interface Product {
   name: string
   slug: string
   description: string
-  price: number
+  price: number // Converted from Prisma Decimal in API
+  comparePrice?: number | null
+  costPrice?: number | null
   stock: number
   featured: boolean
   category: {
@@ -129,6 +131,9 @@ export default function AdminProductsPage() {
   })
 
   const fetchProducts = async () => {
+    console.log('[ADMIN_PRODUCTS_PAGE] Starting fetchProducts...')
+    console.log('[ADMIN_PRODUCTS_PAGE] Current filters:', { page, sortBy, sortOrder, searchTerm, categoryFilter, statusFilter })
+    
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -141,20 +146,40 @@ export default function AdminProductsPage() {
         ...(statusFilter !== 'all' && { status: statusFilter })
       })
 
+      console.log('[ADMIN_PRODUCTS_PAGE] Fetching:', `/api/admin/products?${params}`)
       const response = await fetch(`/api/admin/products?${params}`)
       
       if (response.ok) {
         const data: ProductsResponse = await response.json()
+        console.log('[ADMIN_PRODUCTS_PAGE] Received data:', {
+          productsCount: data.products.length,
+          categoriesCount: data.categories.length,
+          insights: data.insights,
+          pagination: data.pagination
+        })
+        
+        // Debug first product's price type
+        if (data.products.length > 0) {
+          const firstProduct = data.products[0]
+          console.log('[ADMIN_PRODUCTS_PAGE] First product price type and value:', {
+            name: firstProduct.name,
+            price: firstProduct.price,
+            priceType: typeof firstProduct.price,
+            hasToFixed: typeof firstProduct.price.toFixed === 'function'
+          })
+        }
+        
         setProducts(data.products)
         setCategories(data.categories)
         setPagination(data.pagination)
         setInsights(data.insights)
       } else {
         const errorData = await response.json()
-        console.error('Failed to fetch products:', errorData.error || 'Unknown error')
+        console.error('[ADMIN_PRODUCTS_PAGE] API Error:', errorData.error || 'Unknown error')
+        console.error('[ADMIN_PRODUCTS_PAGE] Full error response:', errorData)
       }
     } catch (error) {
-      console.error('Error fetching products:', error)
+      console.error('[ADMIN_PRODUCTS_PAGE] Network/Parse Error:', error)
     }
     setLoading(false)
   }
@@ -164,6 +189,8 @@ export default function AdminProductsPage() {
   }, [page, sortBy, sortOrder, searchTerm, categoryFilter, statusFilter])
 
   const handleCreateProduct = async () => {
+    console.log('[ADMIN_PRODUCTS_PAGE] Creating product with data:', formData)
+    
     try {
       const response = await fetch('/api/admin/products', {
         method: 'POST',
@@ -173,7 +200,12 @@ export default function AdminProductsPage() {
         body: JSON.stringify(formData)
       })
 
+      console.log('[ADMIN_PRODUCTS_PAGE] Create response status:', response.status)
+      
       if (response.ok) {
+        const responseData = await response.json()
+        console.log('[ADMIN_PRODUCTS_PAGE] Product created successfully:', responseData)
+        
         setIsCreateModalOpen(false)
         setFormData({
           name: '',
@@ -188,10 +220,11 @@ export default function AdminProductsPage() {
         fetchProducts()
       } else {
         const data = await response.json()
-        console.error('Failed to create product:', data.error)
+        console.error('[ADMIN_PRODUCTS_PAGE] Create failed:', data.error)
+        console.error('[ADMIN_PRODUCTS_PAGE] Full error response:', data)
       }
     } catch (error) {
-      console.error('Error creating product:', error)
+      console.error('[ADMIN_PRODUCTS_PAGE] Create network error:', error)
     }
   }
 
@@ -599,7 +632,12 @@ export default function AdminProductsPage() {
                           </div>
                         </TableCell>
                         <TableCell>{product.category.name}</TableCell>
-                        <TableCell>${product.price.toFixed(2)}</TableCell>
+                        <TableCell>
+                          {typeof product.price === 'number' 
+                            ? `$${product.price.toFixed(2)}` 
+                            : `$${Number(product.price || 0).toFixed(2)}`
+                          }
+                        </TableCell>
                         <TableCell>{product.stock}</TableCell>
                         <TableCell>
                           <Badge variant="secondary" className={stockStatus.color}>

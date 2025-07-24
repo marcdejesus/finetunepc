@@ -21,9 +21,13 @@ export async function GET(
 ) {
   try {
     const { productId } = await params
+    console.log(`[ADMIN_PRODUCT_GET] Fetching product: ${productId}`)
+    
     const session = await auth()
+    console.log(`[ADMIN_PRODUCT_GET] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
     
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log('[ADMIN_PRODUCT_GET] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -114,8 +118,19 @@ export async function GET(
       return sum + (Number(item.price) * item.quantity)
     }, 0)
 
+    // Convert Decimal fields to numbers for frontend consumption
+    const productWithNumbers = {
+      ...product,
+      price: Number(product.price),
+      comparePrice: product.comparePrice ? Number(product.comparePrice) : null,
+      costPrice: product.costPrice ? Number(product.costPrice) : null,
+    }
+
+    console.log(`[ADMIN_PRODUCT_GET] Successfully fetched product: ${product.name}`)
+    console.log(`[ADMIN_PRODUCT_GET] Metrics - Sold: ${salesMetrics._sum.quantity}, Revenue: ${totalRevenue}`)
+
     return NextResponse.json({
-      product,
+      product: productWithNumbers,
       metrics: {
         totalSold: salesMetrics._sum.quantity || 0,
         totalOrders: salesMetrics._count || 0,
@@ -140,14 +155,21 @@ export async function PATCH(
 ) {
   try {
     const { productId } = await params
+    console.log(`[ADMIN_PRODUCT_PATCH] Updating product: ${productId}`)
+    
     const session = await auth()
+    console.log(`[ADMIN_PRODUCT_PATCH] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
     
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log('[ADMIN_PRODUCT_PATCH] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    console.log('[ADMIN_PRODUCT_PATCH] Request body:', JSON.stringify(body, null, 2))
+    
     const validatedData = updateProductSchema.parse(body)
+    console.log('[ADMIN_PRODUCT_PATCH] Validated data:', JSON.stringify(validatedData, null, 2))
 
     // Check if product exists
     const existingProduct = await prisma.product.findUnique({
@@ -195,7 +217,17 @@ export async function PATCH(
       }
     })
 
-    return NextResponse.json({ product: updatedProduct })
+    // Convert Decimal fields to numbers for frontend consumption
+    const productWithNumbers = {
+      ...updatedProduct,
+      price: Number(updatedProduct.price),
+      comparePrice: updatedProduct.comparePrice ? Number(updatedProduct.comparePrice) : null,
+      costPrice: updatedProduct.costPrice ? Number(updatedProduct.costPrice) : null,
+    }
+
+    console.log(`[ADMIN_PRODUCT_PATCH] Successfully updated product: ${updatedProduct.name}`)
+
+    return NextResponse.json({ product: productWithNumbers })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -219,9 +251,13 @@ export async function DELETE(
 ) {
   try {
     const { productId } = await params
+    console.log(`[ADMIN_PRODUCT_DELETE] Deleting product: ${productId}`)
+    
     const session = await auth()
+    console.log(`[ADMIN_PRODUCT_DELETE] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
     
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log('[ADMIN_PRODUCT_DELETE] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -254,7 +290,7 @@ export async function DELETE(
       })
 
       // Delete product images
-      await tx.image.deleteMany({
+      await tx.productImage.deleteMany({
         where: { productId: productId }
       })
 
@@ -263,6 +299,8 @@ export async function DELETE(
         where: { id: productId }
       })
     })
+
+    console.log(`[ADMIN_PRODUCT_DELETE] Successfully deleted product: ${productId}`)
 
     return NextResponse.json({ 
       message: 'Product deleted successfully',

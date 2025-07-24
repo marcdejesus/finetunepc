@@ -19,8 +19,13 @@ const refundSchema = z.object({
 // GET - Fetch orders with admin details
 export async function GET(request: NextRequest) {
   try {
+    console.log('[ADMIN_ORDERS_GET] Starting orders fetch...')
+    
     const session = await auth()
+    console.log(`[ADMIN_ORDERS_GET] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
+    
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log('[ADMIN_ORDERS_GET] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -133,8 +138,25 @@ export async function GET(request: NextRequest) {
       })
     ])
 
+    // Convert Decimal fields to numbers for frontend consumption
+    const ordersWithNumbers = orders.map(order => ({
+      ...order,
+      subtotal: Number(order.subtotal),
+      tax: Number(order.tax),
+      shipping: Number(order.shipping),
+      discount: Number(order.discount),
+      total: Number(order.total),
+      orderItems: order.orderItems.map(item => ({
+        ...item,
+        price: Number(item.price)
+      }))
+    }))
+
+    console.log(`[ADMIN_ORDERS_GET] Successfully fetched ${orders.length} orders for page ${page}`)
+    console.log(`[ADMIN_ORDERS_GET] Total orders: ${totalCount}, Revenue: ${Number(totalRevenue._sum.total || 0)}`)
+
     return NextResponse.json({
-      orders,
+      orders: ordersWithNumbers,
       pagination: {
         page,
         limit,
@@ -165,13 +187,21 @@ export async function GET(request: NextRequest) {
 // PATCH - Update order status (bulk operation)
 export async function PATCH(request: NextRequest) {
   try {
+    console.log('[ADMIN_ORDERS_PATCH] Updating order status...')
+    
     const session = await auth()
+    console.log(`[ADMIN_ORDERS_PATCH] Session user: ${session?.user?.id}, role: ${session?.user?.role}`)
+    
     if (!session?.user?.id || session.user.role !== 'ADMIN') {
+      console.log('[ADMIN_ORDERS_PATCH] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    console.log('[ADMIN_ORDERS_PATCH] Request body:', JSON.stringify(body, null, 2))
+    
     const validatedData = updateOrderStatusSchema.parse(body)
+    console.log('[ADMIN_ORDERS_PATCH] Validated data:', JSON.stringify(validatedData, null, 2))
 
     const updateData: any = {
       status: validatedData.status,

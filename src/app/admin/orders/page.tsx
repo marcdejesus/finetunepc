@@ -296,9 +296,15 @@ export default function AdminOrdersPage() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${insights.totalRevenue.toFixed(2)}</div>
+                <div className="text-2xl font-bold">
+                  ${typeof insights.totalRevenue === 'number' 
+                    ? insights.totalRevenue.toFixed(2) 
+                    : Number(insights.totalRevenue || 0).toFixed(2)}
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Average: ${insights.averageOrderValue.toFixed(2)}
+                  Average: ${typeof insights.averageOrderValue === 'number' 
+                    ? insights.averageOrderValue.toFixed(2) 
+                    : Number(insights.averageOrderValue || 0).toFixed(2)}
                 </p>
               </CardContent>
             </Card>
