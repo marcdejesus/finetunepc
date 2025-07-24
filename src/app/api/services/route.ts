@@ -131,11 +131,11 @@ export async function POST(request: NextRequest) {
     } catch (validationError) {
       console.log('❌ Service validation failed:', validationError)
       if (validationError instanceof z.ZodError) {
-        console.log('🔍 Detailed validation errors:', validationError.errors)
+        console.log('🔍 Detailed validation errors:', validationError.issues)
         return NextResponse.json(
           { 
             error: 'Validation error', 
-            details: validationError.errors,
+            details: validationError.issues,
             receivedData: body
           },
           { status: 400 }
@@ -176,8 +176,8 @@ export async function POST(request: NextRequest) {
         userId: session.user.id,
         price: estimatedPrice,
         priority: validatedData.priority,
-        deviceInfo: validatedData.deviceInfo || null,
-        issueDetails: validatedData.issueDetails || null,
+        deviceInfo: validatedData.deviceInfo || undefined,
+        issueDetails: validatedData.issueDetails || undefined,
         status: 'PENDING'
       },
       include: {
@@ -220,9 +220,9 @@ export async function POST(request: NextRequest) {
     console.error('🚨 Service creation error:', error)
     
     if (error instanceof z.ZodError) {
-      console.log('🔍 Zod validation error details:', error.errors)
+      console.log('🔍 Zod validation error details:', error.issues)
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

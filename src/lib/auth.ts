@@ -185,16 +185,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signOut(message) {
       console.log("User signed out")
       
-      if (message.session?.user?.id) {
-        await logActivity({
-          userId: message.session.user.id,
-          action: 'LOGOUT',
-          resource: 'authentication',
-          details: {
-            email: message.session.user.email
-          }
-        })
-      }
+      // Note: In NextAuth v5, signOut event doesn't include session info
+      // Activity logging for logout will need to be handled differently
+      // if needed, such as from the client side or middleware
     }
   }
 }) 

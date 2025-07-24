@@ -13,7 +13,7 @@ const reorderImagesSchema = z.object({
 // PATCH - Reorder product images
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { productId: string } }
+  { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
     const session = await auth()
@@ -21,7 +21,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { productId } = params
+    const { productId } = await params
     const body = await request.json()
     const validatedData = reorderImagesSchema.parse(body)
 
@@ -57,7 +57,7 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

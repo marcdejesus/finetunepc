@@ -15,7 +15,7 @@ const updateReviewSchema = z.object({
 // PATCH - Update review
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { reviewId: string } }
+  { params }: { params: Promise<{ reviewId: string }> }
 ) {
   try {
     console.log('[ADMIN_REVIEW_PATCH] Starting review update...')
@@ -28,7 +28,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { reviewId } = params
+    const { reviewId } = await params
     const body = await request.json()
     console.log(`[ADMIN_REVIEW_PATCH] Updating review ${reviewId} with data:`, body)
     
@@ -77,9 +77,9 @@ export async function PATCH(
     return NextResponse.json({ review: updatedReview })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('[ADMIN_REVIEW_PATCH] Validation error:', error.errors)
+      console.error('[ADMIN_REVIEW_PATCH] Validation error:', error.issues)
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }
@@ -95,7 +95,7 @@ export async function PATCH(
 // DELETE - Delete review
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { reviewId: string } }
+  { params }: { params: Promise<{ reviewId: string }> }
 ) {
   try {
     console.log('[ADMIN_REVIEW_DELETE] Starting review deletion...')
@@ -108,7 +108,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { reviewId } = params
+    const { reviewId } = await params
     console.log(`[ADMIN_REVIEW_DELETE] Deleting review ${reviewId}`)
 
     // Verify review exists
@@ -154,7 +154,7 @@ export async function DELETE(
 // GET - Get single review details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { reviewId: string } }
+  { params }: { params: Promise<{ reviewId: string }> }
 ) {
   try {
     console.log('[ADMIN_REVIEW_GET] Starting review fetch...')
@@ -167,7 +167,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { reviewId } = params
+    const { reviewId } = await params
     console.log(`[ADMIN_REVIEW_GET] Fetching review ${reviewId}`)
 
     const review = await prisma.review.findUnique({

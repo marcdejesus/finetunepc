@@ -230,10 +230,10 @@ export default function BookServicePage() {
     } catch (error) {
       console.error('🚨 Error booking service:', error)
       console.error('Error details:', {
-        message: error.message,
-        stack: error.stack
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       })
-      alert(`Failed to book service: ${error.message}`)
+      alert(`Failed to book service: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setSubmitting(false)
     }

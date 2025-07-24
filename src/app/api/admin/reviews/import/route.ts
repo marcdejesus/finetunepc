@@ -161,11 +161,11 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('[REVIEW_IMPORT] Validation error:', error.errors)
+      console.error('[REVIEW_IMPORT] Validation error:', error.issues)
       return NextResponse.json(
         { 
           error: 'Validation error', 
-          details: error.errors,
+          details: error.issues,
           message: 'Please check your review data format'
         },
         { status: 400 }

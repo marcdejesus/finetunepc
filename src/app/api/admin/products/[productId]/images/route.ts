@@ -21,7 +21,7 @@ const reorderImagesSchema = z.object({
 // POST - Add new images to product
 export async function POST(
   request: NextRequest,
-  { params }: { params: { productId: string } }
+  { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
     const session = await auth()
@@ -29,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { productId } = params
+    const { productId } = await params
     const body = await request.json()
     const validatedData = createImagesSchema.parse(body)
 
@@ -63,7 +63,7 @@ export async function POST(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }
@@ -79,7 +79,7 @@ export async function POST(
 // PATCH - Reorder images
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { productId: string } }
+  { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
     const session = await auth()
@@ -87,7 +87,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { productId } = params
+    const { productId } = await params
     const body = await request.json()
     
     // Check if this is a reorder request
@@ -114,7 +114,7 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

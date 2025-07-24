@@ -11,7 +11,7 @@ const updateImageSchema = z.object({
 // PATCH - Update image details
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { productId: string; imageId: string } }
+  { params }: { params: Promise<{ productId: string; imageId: string }> }
 ) {
   try {
     const session = await auth()
@@ -19,7 +19,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { productId, imageId } = params
+    const { productId, imageId } = await params
     const body = await request.json()
     const validatedData = updateImageSchema.parse(body)
 
@@ -48,7 +48,7 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }
@@ -64,7 +64,7 @@ export async function PATCH(
 // DELETE - Remove image
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { productId: string; imageId: string } }
+  { params }: { params: Promise<{ productId: string; imageId: string }> }
 ) {
   try {
     const session = await auth()
@@ -72,7 +72,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { productId, imageId } = params
+    const { productId, imageId } = await params
 
     // Verify image exists and belongs to product
     const existingImage = await prisma.productImage.findFirst({

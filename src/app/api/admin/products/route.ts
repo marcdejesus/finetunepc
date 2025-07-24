@@ -17,7 +17,7 @@ const createProductSchema = z.object({
   categoryId: z.string().min(1, 'Category is required'),
   brand: z.string().optional(),
   warranty: z.string().optional(),
-  specifications: z.record(z.any()).optional(),
+  specifications: z.record(z.string(), z.any()).optional(),
   featured: z.boolean().default(false),
   isActive: z.boolean().default(true),
   metaTitle: z.string().optional(),
@@ -356,11 +356,11 @@ export async function POST(request: NextRequest) {
       
     } catch (validationError) {
       if (validationError instanceof z.ZodError) {
-        console.log('[ADMIN_PRODUCTS_POST] ❌ Validation failed:', validationError.errors)
+        console.log('[ADMIN_PRODUCTS_POST] ❌ Validation failed:', validationError.issues)
         return NextResponse.json(
           { 
             error: 'Validation error', 
-            details: validationError.errors,
+            details: validationError.issues,
             message: 'Please check your input data'
           },
           { status: 400 }
@@ -372,9 +372,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[ADMIN_PRODUCTS_POST] ❌ UNEXPECTED ERROR:', error)
     console.error('[ADMIN_PRODUCTS_POST] Error details:', {
-      name: error?.name,
-      message: error?.message,
-      stack: error?.stack
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
     })
     
     return NextResponse.json(
@@ -424,7 +424,7 @@ export async function PATCH(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

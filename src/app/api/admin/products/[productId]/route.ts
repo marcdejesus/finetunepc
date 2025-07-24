@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { z } from 'zod'
+import { OrderStatus } from '@prisma/client'
 
 const updateProductSchema = z.object({
   name: z.string().min(1, 'Product name is required').optional(),
@@ -10,7 +11,7 @@ const updateProductSchema = z.object({
   price: z.number().positive('Price must be positive').optional(),
   stock: z.number().int().min(0, 'Stock must be non-negative').optional(),
   categoryId: z.string().min(1, 'Category is required').optional(),
-  specifications: z.record(z.any()).optional(),
+  specifications: z.record(z.string(), z.any()).optional(),
   featured: z.boolean().optional(),
 })
 
@@ -90,7 +91,7 @@ export async function GET(
       where: {
         productId: productId,
         order: {
-          status: 'COMPLETED'
+          status: OrderStatus.DELIVERED
         }
       },
       _sum: {
@@ -105,7 +106,7 @@ export async function GET(
       where: {
         productId: productId,
         order: {
-          status: 'COMPLETED'
+          status: OrderStatus.DELIVERED
         }
       },
       select: {
@@ -231,7 +232,7 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

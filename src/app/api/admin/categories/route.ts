@@ -122,9 +122,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ category }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('[ADMIN_CATEGORIES_POST] Validation error:', error.errors)
+      console.error('[ADMIN_CATEGORIES_POST] Validation error:', error.issues)
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }
