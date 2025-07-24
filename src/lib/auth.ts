@@ -5,6 +5,7 @@ import GitHubProvider from "next-auth/providers/github"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { compare } from "bcryptjs"
 import { prisma } from "./db"
+import { logActivity } from "./activity-logger"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -168,9 +169,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     async signIn(message) {
       console.log("User signed in:", message.user.email)
+      
+      if (message.user?.id) {
+        await logActivity({
+          userId: message.user.id,
+          action: 'LOGIN',
+          resource: 'authentication',
+          details: {
+            provider: message.account?.provider || 'credentials',
+            email: message.user.email
+          }
+        })
+      }
     },
     async signOut(message) {
       console.log("User signed out")
+      
+      if (message.session?.user?.id) {
+        await logActivity({
+          userId: message.session.user.id,
+          action: 'LOGOUT',
+          resource: 'authentication',
+          details: {
+            email: message.session.user.email
+          }
+        })
+      }
     }
   }
 }) 

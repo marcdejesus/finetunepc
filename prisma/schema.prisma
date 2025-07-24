@@ -65,6 +65,7 @@ model User {
   cart          Cart?
   addresses     Address[]
   reviews       Review[]
+  activityLogs  ActivityLog[]
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -279,6 +280,24 @@ model Review {
   @@unique([productId, userId])
 }
 
+// Activity Logs
+model ActivityLog {
+  id          String            @id @default(cuid())
+  userId      String
+  action      ActivityAction
+  resource    String
+  resourceId  String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime          @default(now())
+  
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
 // Enums
 enum Role {
   USER
@@ -326,6 +345,26 @@ enum ServiceStatus {
   COMPLETED
   CANCELLED
   ON_HOLD
+}
+
+enum ActivityAction {
+  LOGIN
+  LOGOUT
+  REGISTER
+  PASSWORD_CHANGE
+  EMAIL_CHANGE
+  PROFILE_UPDATE
+  ORDER_CREATE
+  ORDER_UPDATE
+  ORDER_CANCEL
+  SERVICE_CREATE
+  SERVICE_UPDATE
+  SERVICE_CANCEL
+  REVIEW_CREATE
+  REVIEW_UPDATE
+  REVIEW_DELETE
+  ROLE_CHANGE
+  ACCOUNT_DELETE
 }
 
 enum Priority {

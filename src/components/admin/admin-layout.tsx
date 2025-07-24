@@ -19,7 +19,8 @@ import {
   X,
   Bell,
   Search,
-  Shield
+  Shield,
+  Activity
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -52,6 +53,11 @@ const sidebarItems = [
     title: 'Customers',
     href: '/admin/customers',
     icon: Users,
+  },
+  {
+    title: 'Activity Logs',
+    href: '/admin/activity-logs',
+    icon: Activity,
   },
   {
     title: 'Analytics',
