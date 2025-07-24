@@ -1,19 +1,28 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useUploadThing } from '@/lib/uploadthing'
-import { X, Upload, Move, Eye, Trash2, Plus, Loader2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { 
+  Upload, 
+  X, 
+  Move, 
+  Eye,
+  Edit,
+  Trash2,
+  Image as ImageIcon,
+  Loader2
+} from 'lucide-react'
+import { UploadButton, UploadDropzone } from '@uploadthing/react'
+import type { OurFileRouter } from '@/app/api/uploadthing/core'
 
 interface ProductImage {
   id: string
   url: string
-  altText?: string
+  altText: string | null
   position: number
 }
 
@@ -22,267 +31,325 @@ interface ProductImageGalleryProps {
   images: ProductImage[]
   onImagesChange: (images: ProductImage[]) => void
   maxImages?: number
-  editable?: boolean
 }
 
-export function ProductImageGallery({
-  productId,
-  images = [],
-  onImagesChange,
-  maxImages = 10,
-  editable = true
+export function ProductImageGallery({ 
+  productId, 
+  images, 
+  onImagesChange, 
+  maxImages = 10 
 }: ProductImageGalleryProps) {
-  const [selectedImage, setSelectedImage] = useState<number>(0)
   const [uploading, setUploading] = useState(false)
+  const [editingImage, setEditingImage] = useState<ProductImage | null>(null)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
-  
-  const { startUpload, isUploading } = useUploadThing("productImage", {
-    onClientUploadComplete: (res) => {
-      if (res) {
-        const newImages = res.map((file, index) => ({
-          id: `temp-${Date.now()}-${index}`,
-          url: file.url,
-          altText: '',
-          position: images.length + index
-        }))
-        
+
+  const handleUploadComplete = async (res: any[]) => {
+    if (!res || res.length === 0) return
+
+    const newImages = res.map((file, index) => ({
+      id: `temp-${Date.now()}-${index}`,
+      url: file.url,
+      altText: '',
+      position: images.length + index
+    }))
+
+    // If we have a productId, save images to database
+    if (productId) {
+      try {
+        const response = await fetch(`/api/admin/products/${productId}/images`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            images: newImages.map(img => ({
+              url: img.url,
+              altText: img.altText,
+              position: img.position
+            }))
+          })
+        })
+
+        if (response.ok) {
+          const { images: savedImages } = await response.json()
+          onImagesChange([...images, ...savedImages])
+        } else {
+          console.error('Failed to save images')
+          onImagesChange([...images, ...newImages])
+        }
+      } catch (error) {
+        console.error('Error saving images:', error)
         onImagesChange([...images, ...newImages])
-        setUploading(false)
       }
-    },
-    onUploadError: (error: Error) => {
-      console.error('Upload error:', error)
-      setUploading(false)
-      alert('Upload failed: ' + error.message)
-    },
-  })
-  
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    if (files.length === 0) return
-    
-    if (images.length + files.length > maxImages) {
-      alert(`Maximum ${maxImages} images allowed`)
-      return
-    }
-    
-    setUploading(true)
-    await startUpload(files)
-  }
-  
-  const removeImage = (index: number) => {
-    const newImages = images.filter((_, i) => i !== index)
-      .map((img, i) => ({ ...img, position: i }))
-    onImagesChange(newImages)
-    
-    if (selectedImage >= newImages.length) {
-      setSelectedImage(Math.max(0, newImages.length - 1))
+    } else {
+      onImagesChange([...images, ...newImages])
     }
   }
-  
-  const updateImageAlt = (index: number, altText: string) => {
-    const newImages = [...images]
-    newImages[index] = { ...newImages[index], altText }
-    onImagesChange(newImages)
+
+  const handleImageUpdate = async (imageId: string, altText: string) => {
+    const updatedImages = images.map(img => 
+      img.id === imageId ? { ...img, altText } : img
+    )
+    onImagesChange(updatedImages)
+
+    // Update in database if productId exists
+    if (productId && !imageId.startsWith('temp-')) {
+      try {
+        await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ altText })
+        })
+      } catch (error) {
+        console.error('Error updating image:', error)
+      }
+    }
+
+    setEditingImage(null)
   }
-  
-  const moveImage = (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex) return
-    
-    const newImages = [...images]
-    const [movedImage] = newImages.splice(fromIndex, 1)
-    newImages.splice(toIndex, 0, movedImage)
-    
-    // Update positions
-    const reorderedImages = newImages.map((img, i) => ({ ...img, position: i }))
-    onImagesChange(reorderedImages)
-    
-    setSelectedImage(toIndex)
+
+  const handleImageDelete = async (imageId: string) => {
+    if (!confirm('Are you sure you want to delete this image?')) return
+
+    const updatedImages = images.filter(img => img.id !== imageId)
+    onImagesChange(updatedImages)
+
+    // Delete from database if productId exists
+    if (productId && !imageId.startsWith('temp-')) {
+      try {
+        await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
+          method: 'DELETE'
+        })
+      } catch (error) {
+        console.error('Error deleting image:', error)
+      }
+    }
   }
-  
-  const handleDragStart = (e: React.DragEvent, index: number) => {
+
+  const handleDragStart = (index: number) => {
     setDraggedIndex(index)
-    e.dataTransfer.effectAllowed = 'move'
   }
-  
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
   }
-  
-  const handleDrop = (e: React.DragEvent, toIndex: number) => {
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault()
-    if (draggedIndex !== null) {
-      moveImage(draggedIndex, toIndex)
+    
+    if (draggedIndex === null || draggedIndex === dropIndex) {
       setDraggedIndex(null)
+      return
     }
+
+    const reorderedImages = [...images]
+    const [draggedImage] = reorderedImages.splice(draggedIndex, 1)
+    reorderedImages.splice(dropIndex, 0, draggedImage)
+
+    // Update positions
+    const updatedImages = reorderedImages.map((img, index) => ({
+      ...img,
+      position: index
+    }))
+
+    onImagesChange(updatedImages)
+
+    // Update positions in database if productId exists
+    if (productId) {
+      try {
+        await fetch(`/api/admin/products/${productId}/images/reorder`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageOrders: updatedImages.map(img => ({
+              id: img.id,
+              position: img.position
+            }))
+          })
+        })
+      } catch (error) {
+        console.error('Error reordering images:', error)
+      }
+    }
+
+    setDraggedIndex(null)
   }
-  
-  if (!editable && images.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        No images available
-      </div>
-    )
-  }
-  
+
   return (
-    <div className="space-y-4">
-      {/* Main Image Display */}
-      {images.length > 0 && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden mb-4">
-              <Image
-                src={images[selectedImage]?.url}
-                alt={images[selectedImage]?.altText || `Product image ${selectedImage + 1}`}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 50vw"
-              />
-              
-              {/* Image Counter */}
-              <div className="absolute top-4 right-4">
-                <Badge variant="secondary">
-                  {selectedImage + 1} of {images.length}
-                </Badge>
-              </div>
-              
-              {/* Navigation Arrows */}
-              {images.length > 1 && (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="absolute left-4 top-1/2 transform -translate-y-1/2"
-                    onClick={() => setSelectedImage(selectedImage > 0 ? selectedImage - 1 : images.length - 1)}
-                  >
-                    ←
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2"
-                    onClick={() => setSelectedImage(selectedImage < images.length - 1 ? selectedImage + 1 : 0)}
-                  >
-                    →
-                  </Button>
-                </>
-              )}
-            </div>
-            
-            {/* Alt Text Editor */}
-            {editable && images[selectedImage] && (
-              <div className="space-y-2">
-                <Label htmlFor="alt-text">Alt Text (for accessibility)</Label>
-                <Input
-                  id="alt-text"
-                  value={images[selectedImage]?.altText || ''}
-                  onChange={(e) => updateImageAlt(selectedImage, e.target.value)}
-                  placeholder="Describe this image..."
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-      
-      {/* Thumbnail Gallery */}
-      <div className="grid grid-cols-6 gap-2">
-        {images.map((image, index) => (
-          <div
-            key={image.id}
-            className={`relative aspect-square bg-gray-100 rounded-md overflow-hidden cursor-pointer border-2 transition-colors ${
-              selectedImage === index ? 'border-primary' : 'border-transparent hover:border-gray-300'
-            }`}
-            onClick={() => setSelectedImage(index)}
-            draggable={editable}
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, index)}
-          >
-            <Image
-              src={image.url}
-              alt={image.altText || `Thumbnail ${index + 1}`}
-              fill
-              className="object-cover"
-              sizes="100px"
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <ImageIcon className="h-5 w-5" />
+          <span>Product Images</span>
+          <Badge variant="secondary">{images.length}/{maxImages}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Upload Area */}
+        {images.length < maxImages && (
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+            <UploadDropzone<OurFileRouter, "productImage">
+              endpoint="productImage"
+              onClientUploadComplete={handleUploadComplete}
+              onUploadError={(error: Error) => {
+                console.error('Upload error:', error)
+                alert(`Upload failed: ${error.message}`)
+              }}
+              onUploadBegin={() => setUploading(true)}
+              onDrop={() => setUploading(false)}
+              className="ut-label:text-lg ut-allowed-content:ut-uploading:text-red-300"
             />
             
-            {/* Image Actions */}
-            {editable && (
-              <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                <div className="flex space-x-1">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSelectedImage(index)
+            {uploading && (
+              <div className="flex items-center justify-center mt-4">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                <span>Uploading images...</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Image Grid */}
+        {images.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {images
+              .sort((a, b) => a.position - b.position)
+              .map((image, index) => (
+                <div
+                  key={image.id}
+                  className="relative group border rounded-lg overflow-hidden bg-gray-50"
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, index)}
+                >
+                  {/* Image */}
+                  <div className="aspect-square">
+                    <img
+                      src={image.url}
+                      alt={image.altText || `Product image ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  {/* Primary Badge */}
+                  {index === 0 && (
+                    <Badge className="absolute top-2 left-2 bg-blue-600">
+                      Primary
+                    </Badge>
+                  )}
+
+                  {/* Overlay Actions */}
+                  <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => window.open(image.url, '_blank')}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setEditingImage(image)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleImageDelete(image.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {/* Drag Handle */}
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="bg-white rounded p-1 cursor-move">
+                      <Move className="h-3 w-3" />
+                    </div>
+                  </div>
+
+                  {/* Position Indicator */}
+                  <div className="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded">
+                    {index + 1}
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {images.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium">No images uploaded</p>
+            <p className="text-sm">Upload images to showcase your product</p>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {editingImage && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold mb-4">Edit Image Details</h3>
+              
+              <div className="space-y-4">
+                <div className="aspect-square w-32 mx-auto">
+                  <img
+                    src={editingImage.url}
+                    alt={editingImage.altText || 'Product image'}
+                    className="w-full h-full object-cover rounded"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="altText">Alt Text (for accessibility)</Label>
+                  <Input
+                    id="altText"
+                    defaultValue={editingImage.altText || ''}
+                    placeholder="Describe this image..."
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        const input = e.target as HTMLInputElement
+                        handleImageUpdate(editingImage.id, input.value)
+                      }
                     }}
-                  >
-                    <Eye className="w-3 h-3" />
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeImage(index)
-                    }}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
+                  />
                 </div>
               </div>
-            )}
-            
-            {/* Position Indicator */}
-            <div className="absolute top-1 left-1">
-              <Badge variant="secondary" className="text-xs h-5">
-                {index + 1}
-              </Badge>
+              
+              <div className="flex justify-end space-x-2 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditingImage(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    const input = document.getElementById('altText') as HTMLInputElement
+                    handleImageUpdate(editingImage.id, input.value)
+                  }}
+                >
+                  Save Changes
+                </Button>
+              </div>
             </div>
           </div>
-        ))}
-        
-        {/* Upload Button */}
-        {editable && images.length < maxImages && (
-          <label className="aspect-square bg-gray-50 border-2 border-dashed border-gray-300 rounded-md flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors">
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleFileSelect}
-              className="hidden"
-              disabled={uploading || isUploading}
-            />
-            {uploading || isUploading ? (
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-            ) : (
-              <>
-                <Plus className="w-6 h-6 text-gray-400 mb-1" />
-                <span className="text-xs text-gray-500">Add Image</span>
-              </>
-            )}
-          </label>
         )}
-      </div>
-      
-      {/* Upload Status */}
-      {(uploading || isUploading) && (
-        <div className="text-center py-4">
-          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">Uploading images...</p>
+
+        {/* Upload Tips */}
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <h4 className="font-medium text-blue-900 mb-2">Image Guidelines</h4>
+          <ul className="text-sm text-blue-700 space-y-1">
+            <li>• Upload high-quality images (minimum 800x800px recommended)</li>
+            <li>• First image will be used as the primary product image</li>
+            <li>• Drag and drop to reorder images</li>
+            <li>• Add alt text for better accessibility and SEO</li>
+            <li>• Maximum {maxImages} images per product</li>
+          </ul>
         </div>
-      )}
-      
-      {/* Gallery Info */}
-      <div className="text-sm text-muted-foreground text-center">
-        {images.length} of {maxImages} images • Drag to reorder • Click to select
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 } 

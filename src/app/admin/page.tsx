@@ -1,5 +1,8 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import { redirect } from "next/navigation"
-import { auth } from "@/lib/auth"
+import { useSession } from 'next-auth/react'
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,63 +15,142 @@ import {
   Package,
   Wrench,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Calendar,
+  Eye,
+  ShoppingCart
 } from "lucide-react"
 import Link from "next/link"
-import { prisma } from "@/lib/db"
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts'
 
-export default async function AdminDashboard() {
-  const session = await auth()
-  
-  if (!session) {
-    redirect("/auth/signin")
+interface DashboardData {
+  metrics: {
+    totalRevenue: number
+    totalOrders: number
+    totalProducts: number
+    totalUsers: number
+    totalServices: number
+    pendingOrders: number
+    lowStockProducts: number
+    todayOrders: number
+    monthlyGrowth: number
   }
+  revenueChart: Array<{
+    month: string
+    revenue: number
+    orders: number
+  }>
+  categoryChart: Array<{
+    name: string
+    value: number
+    color: string
+  }>
+  recentActivity: Array<{
+    id: string
+    type: 'order' | 'service' | 'product'
+    description: string
+    timestamp: string
+    amount?: number
+  }>
+  topProducts: Array<{
+    id: string
+    name: string
+    sales: number
+    revenue: number
+    stock: number
+  }>
+}
 
-  if (session.user.role !== "ADMIN") {
-    redirect("/auth/error?error=AccessDenied")
-  }
+export default function AdminDashboard() {
+  const { data: session, status } = useSession()
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [timeRange, setTimeRange] = useState('7d') // 7d, 30d, 90d
 
-  // Fetch real analytics data
-  const [
-    totalUsers,
-    totalOrders,
-    totalProducts,
-    totalServices,
-    pendingOrders,
-    lowStockProducts,
-    todayOrders,
-    revenueData
-  ] = await Promise.all([
-    prisma.user.count(),
-    prisma.order.count(),
-    prisma.product.count(),
-    prisma.service.count(),
-    prisma.order.count({ where: { status: 'PENDING' } }),
-    prisma.product.count({ where: { stock: { lte: 10 } } }),
-    prisma.order.count({
-      where: {
-        createdAt: {
-          gte: new Date(new Date().setHours(0, 0, 0, 0))
-        }
+  useEffect(() => {
+    if (status === 'loading') return
+    
+    if (!session) {
+      redirect("/auth/signin")
+    }
+
+    if (session.user.role !== "ADMIN") {
+      redirect("/auth/error?error=AccessDenied")
+    }
+
+    fetchDashboardData()
+  }, [session, status, timeRange])
+
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/admin/dashboard?timeRange=${timeRange}`)
+      if (response.ok) {
+        const data = await response.json()
+        setDashboardData(data)
       }
-    }),
-    prisma.order.aggregate({
-      where: { status: 'DELIVERED' },
-      _sum: { total: true }
-    })
-  ])
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+    }
+    setLoading(false)
+  }
 
-  const totalRevenue = Number(revenueData._sum?.total || 0)
+  if (status === 'loading' || loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </AdminLayout>
+    )
+  }
+
+  if (!session || !dashboardData) {
+    return null
+  }
+
+  const { metrics, revenueChart, categoryChart, recentActivity, topProducts } = dashboardData
 
   return (
     <AdminLayout>
       <div className="space-y-8">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard Overview</h1>
-          <p className="text-muted-foreground">
-            Welcome back, {session.user.name}. Here's what's happening with your store today.
-          </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard Overview</h1>
+            <p className="text-muted-foreground">
+              Welcome back, {session.user.name}. Here's what's happening with your store.
+            </p>
+          </div>
+          
+          <div className="flex space-x-2">
+            {['7d', '30d', '90d'].map((range) => (
+              <Button
+                key={range}
+                variant={timeRange === range ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTimeRange(range)}
+              >
+                {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : '90 Days'}
+              </Button>
+            ))}
+          </div>
         </div>
 
         {/* Key Metrics */}
@@ -79,35 +161,36 @@ export default async function AdminDashboard() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">
-                From {totalOrders} completed orders
-              </p>
+              <div className="text-2xl font-bold">${metrics.totalRevenue.toFixed(2)}</div>
+              <div className="flex items-center text-xs text-muted-foreground">
+                <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
+                +{metrics.monthlyGrowth.toFixed(1)}% from last month
+              </div>
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Orders Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Orders</CardTitle>
               <ShoppingBag className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todayOrders}</div>
+              <div className="text-2xl font-bold">{metrics.totalOrders}</div>
               <p className="text-xs text-muted-foreground">
-                {pendingOrders} pending orders
+                {metrics.todayOrders} today • {metrics.pendingOrders} pending
               </p>
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+              <CardTitle className="text-sm font-medium">Products</CardTitle>
               <Package className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalProducts}</div>
+              <div className="text-2xl font-bold">{metrics.totalProducts}</div>
               <p className="text-xs text-muted-foreground">
-                {lowStockProducts} low stock alerts
+                {metrics.lowStockProducts} low stock alerts
               </p>
             </CardContent>
           </Card>
@@ -118,10 +201,142 @@ export default async function AdminDashboard() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalUsers}</div>
+              <div className="text-2xl font-bold">{metrics.totalUsers}</div>
               <p className="text-xs text-muted-foreground">
-                {totalServices} service bookings
+                {metrics.totalServices} service bookings
               </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Charts Section */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Revenue Trend */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Revenue Trend</CardTitle>
+              <CardDescription>
+                Monthly revenue and order volume
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={revenueChart}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip 
+                    formatter={(value: any, name: string) => [
+                      name === 'revenue' ? `$${value.toFixed(2)}` : value,
+                      name === 'revenue' ? 'Revenue' : 'Orders'
+                    ]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#8884d8"
+                    fill="#8884d8"
+                    fillOpacity={0.6}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Category Distribution */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Sales by Category</CardTitle>
+              <CardDescription>
+                Product category performance
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={categoryChart}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`}
+                  >
+                    {categoryChart.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: any) => [`$${value.toFixed(2)}`, 'Revenue']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Secondary Section */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Top Products */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Performing Products</CardTitle>
+              <CardDescription>
+                Best selling products this period
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {topProducts.map((product, index) => (
+                  <div key={product.id} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-medium">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium">{product.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {product.sales} sold • {product.stock} in stock
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">${product.revenue.toFixed(2)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Activity */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>
+                Latest updates across your store
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {recentActivity.map((activity) => (
+                  <div key={activity.id} className="flex items-center space-x-4">
+                    <div className={`p-2 rounded-full ${
+                      activity.type === 'order' ? 'bg-green-100' : 
+                      activity.type === 'service' ? 'bg-purple-100' : 'bg-blue-100'
+                    }`}>
+                      {activity.type === 'order' && <ShoppingBag className="h-4 w-4 text-green-600" />}
+                      {activity.type === 'service' && <Wrench className="h-4 w-4 text-purple-600" />}
+                      {activity.type === 'product' && <Package className="h-4 w-4 text-blue-600" />}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium">{activity.description}</p>
+                      <p className="text-sm text-muted-foreground">{activity.timestamp}</p>
+                    </div>
+                    {activity.amount && (
+                      <Badge variant="secondary">${activity.amount.toFixed(2)}</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -181,31 +396,31 @@ export default async function AdminDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {pendingOrders > 0 && (
+              {metrics.pendingOrders > 0 && (
                 <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg">
                   <div>
                     <p className="font-medium text-yellow-900">Pending Orders</p>
-                    <p className="text-sm text-yellow-700">{pendingOrders} orders awaiting processing</p>
+                    <p className="text-sm text-yellow-700">{metrics.pendingOrders} orders awaiting processing</p>
                   </div>
                   <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-                    {pendingOrders}
+                    {metrics.pendingOrders}
                   </Badge>
                 </div>
               )}
               
-              {lowStockProducts > 0 && (
+              {metrics.lowStockProducts > 0 && (
                 <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
                   <div>
                     <p className="font-medium text-red-900">Low Stock Alert</p>
-                    <p className="text-sm text-red-700">{lowStockProducts} products need restocking</p>
+                    <p className="text-sm text-red-700">{metrics.lowStockProducts} products need restocking</p>
                   </div>
                   <Badge variant="secondary" className="bg-red-100 text-red-800">
-                    {lowStockProducts}
+                    {metrics.lowStockProducts}
                   </Badge>
                 </div>
               )}
 
-              {pendingOrders === 0 && lowStockProducts === 0 && (
+              {metrics.pendingOrders === 0 && metrics.lowStockProducts === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <TrendingUp className="h-8 w-8 mx-auto mb-2" />
                   <p>All systems running smoothly!</p>
@@ -214,52 +429,6 @@ export default async function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>
-              Latest updates across your store
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <div className="bg-green-100 p-2 rounded-full">
-                  <ShoppingBag className="h-4 w-4 text-green-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">New order received</p>
-                  <p className="text-sm text-muted-foreground">Order processing queue updated</p>
-                </div>
-                <Badge variant="secondary">Today</Badge>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                <div className="bg-blue-100 p-2 rounded-full">
-                  <Package className="h-4 w-4 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">Inventory synchronized</p>
-                  <p className="text-sm text-muted-foreground">Product stock levels updated</p>
-                </div>
-                <Badge variant="secondary">2 hours ago</Badge>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                <div className="bg-purple-100 p-2 rounded-full">
-                  <Wrench className="h-4 w-4 text-purple-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">Service booking confirmed</p>
-                  <p className="text-sm text-muted-foreground">New repair service scheduled</p>
-                </div>
-                <Badge variant="secondary">Yesterday</Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </AdminLayout>
   )
