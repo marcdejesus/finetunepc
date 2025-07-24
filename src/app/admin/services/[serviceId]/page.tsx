@@ -52,6 +52,9 @@ interface Service {
   deviceInfo: any
   issueDetails: string | null
   resolution: string | null
+  // API mapped fields for frontend compatibility
+  notes: string | null
+  completionNotes: string | null
   createdAt: Date
   updatedAt: Date
   user: {
@@ -162,17 +165,17 @@ export default function ServiceDetailPage() {
         setService(serviceData.service)
         setTechnicians(techData.technicians || [])
 
-        // Initialize form data
-        const svc = serviceData.service
-        setFormData({
-          status: svc.status,
-          assignedTo: svc.assignedTo || '',
-          priority: svc.priority,
-          actualHours: svc.actualHours?.toString() || '',
-          partsUsed: svc.partsUsed || [],
-          notes: svc.notes || '',
-          completionNotes: svc.completionNotes || ''
-        })
+                 // Initialize form data
+         const svc = serviceData.service
+         setFormData({
+           status: svc.status,
+           assignedTo: svc.assignedTo || '',
+           priority: svc.priority,
+           actualHours: svc.actualHours?.toString() || '',
+           partsUsed: svc.partsUsed || [],
+           notes: svc.notes || '',
+           completionNotes: svc.completionNotes || ''
+         })
       } catch (error) {
         console.error('🚫 PAGE: Error fetching service:', error)
         // Check if it's an auth error by trying to parse the error
@@ -203,13 +206,13 @@ export default function ServiceDetailPage() {
       if (formData.actualHours !== (service?.actualHours?.toString() || '')) {
         updates.actualHours = formData.actualHours ? parseFloat(formData.actualHours) : null
       }
-      if (JSON.stringify(formData.partsUsed) !== JSON.stringify(service?.partsUsed || [])) {
-        updates.partsUsed = formData.partsUsed
-      }
-      if (formData.notes !== (service?.notes || '')) updates.notes = formData.notes
-      if (formData.completionNotes !== (service?.completionNotes || '')) {
-        updates.completionNotes = formData.completionNotes
-      }
+             if (JSON.stringify(formData.partsUsed) !== JSON.stringify(service?.partsUsed || [])) {
+         updates.partsUsed = formData.partsUsed
+       }
+       if (formData.notes !== (service?.notes || '')) updates.notes = formData.notes
+       if (formData.completionNotes !== (service?.completionNotes || '')) {
+         updates.completionNotes = formData.completionNotes
+       }
 
       if (Object.keys(updates).length === 0) return
 

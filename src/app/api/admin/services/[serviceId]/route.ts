@@ -91,7 +91,14 @@ export async function GET(
 
     console.log(`✅ SERVICE_GET: Access granted for ${session.user.role} ${session.user.id} to service ${serviceId}`)
 
-    return NextResponse.json({ service })
+    // Map database field names to API field names for frontend compatibility
+    const serviceWithMappedFields = {
+      ...service,
+      notes: service.issueDetails,
+      completionNotes: service.resolution
+    }
+
+    return NextResponse.json({ service: serviceWithMappedFields })
   } catch (error) {
     console.error('Error fetching service:', error)
     return NextResponse.json(
@@ -177,10 +184,20 @@ export async function PATCH(
       Object.assign(validatedData, techUpdates)
     }
 
-    // Convert scheduledDate string to Date if provided
+    // Convert scheduledDate string to Date if provided and map field names
     const updateData: any = { ...validatedData }
     if (updateData.scheduledDate) {
       updateData.scheduledDate = new Date(updateData.scheduledDate)
+    }
+    
+    // Map API field names to database field names
+    if (updateData.notes !== undefined) {
+      updateData.issueDetails = updateData.notes
+      delete updateData.notes
+    }
+    if (updateData.completionNotes !== undefined) {
+      updateData.resolution = updateData.completionNotes
+      delete updateData.completionNotes
     }
 
     // Update the service
@@ -252,7 +269,14 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ service: updatedService })
+    // Map database field names to API field names for frontend compatibility
+    const serviceWithMappedFields = {
+      ...updatedService,
+      notes: updatedService.issueDetails,
+      completionNotes: updatedService.resolution
+    }
+
+    return NextResponse.json({ service: serviceWithMappedFields })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -307,7 +331,7 @@ export async function DELETE(
     // Log the deletion
     await logActivity({
       userId: session.user.id,
-      action: 'SERVICE_DELETE',
+      action: 'SERVICE_CANCEL',
       resource: 'service',
       resourceId: serviceId,
       details: {

@@ -130,9 +130,6 @@ export async function GET(request: NextRequest) {
           createdAt: {
             gte: startDate,
             lte: endDate
-          },
-          updatedAt: {
-            not: null
           }
         },
         select: {
