@@ -177,34 +177,57 @@ export default function BookServicePage() {
     e.preventDefault()
     if (!selectedSlot || !serviceType) return
 
+    const requestData = {
+      type: serviceType,
+      title: formData.title,
+      description: formData.description,
+      scheduledDate: selectedSlot.datetime,
+      priority: formData.priority,
+      deviceInfo: formData.deviceInfo,
+      issueDetails: formData.issueDetails
+    }
+
+    console.log('🔧 Client Service Booking Debug:', {
+      formData,
+      selectedSlot,
+      serviceType,
+      requestData
+    })
+
     setSubmitting(true)
     try {
+      console.log('📤 Sending service booking request:', requestData)
+      
       const response = await fetch('/api/services', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          type: serviceType,
-          title: formData.title,
-          description: formData.description,
-          scheduledDate: selectedSlot.datetime,
-          priority: formData.priority,
-          deviceInfo: formData.deviceInfo,
-          issueDetails: formData.issueDetails
-        })
+        body: JSON.stringify(requestData)
+      })
+
+      console.log('📥 Service booking response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
       })
 
       if (!response.ok) {
         const error = await response.json()
+        console.error('❌ Service booking API error:', error)
         throw new Error(error.error || 'Failed to book service')
       }
 
       const { service } = await response.json()
+      console.log('✅ Service booking successful:', service)
       router.push(`/services/${service.id}?booked=true`)
     } catch (error) {
-      console.error('Error booking service:', error)
-      alert('Failed to book service. Please try again.')
+      console.error('🚨 Error booking service:', error)
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      })
+      alert(`Failed to book service: ${error.message}`)
     } finally {
       setSubmitting(false)
     }

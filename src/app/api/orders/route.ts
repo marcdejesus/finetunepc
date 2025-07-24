@@ -47,7 +47,16 @@ export async function POST(request: NextRequest) {
   try {
     const session = await auth()
     
+    console.log('🔍 Session Debug:', {
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      userId: session?.user?.id,
+      userEmail: session?.user?.email,
+      userRole: session?.user?.role
+    })
+    
     if (!session?.user?.id) {
+      console.log('❌ Authentication failed - no session or user ID')
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }

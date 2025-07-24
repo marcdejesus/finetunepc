@@ -96,11 +96,54 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await auth()
+    
+    console.log('🔧 Service Creation Debug - Session:', {
+      hasSession: !!session,
+      userId: session?.user?.id,
+      userEmail: session?.user?.email
+    })
+    
     if (!session?.user?.id) {
+      console.log('❌ Service creation failed - no session')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    
+    console.log('🔧 Service Creation Debug - Request Body:', {
+      bodyKeys: Object.keys(body),
+      type: body.type,
+      title: body.title,
+      description: body.description?.substring(0, 50) + '...',
+      scheduledDate: body.scheduledDate,
+      deviceInfo: body.deviceInfo,
+      issueDetails: body.issueDetails,
+      priority: body.priority
+    })
+    
+    try {
+      const validatedData = createServiceSchema.parse(body)
+      console.log('✅ Service validation passed:', {
+        type: validatedData.type,
+        scheduledDate: validatedData.scheduledDate,
+        priority: validatedData.priority
+      })
+    } catch (validationError) {
+      console.log('❌ Service validation failed:', validationError)
+      if (validationError instanceof z.ZodError) {
+        console.log('🔍 Detailed validation errors:', validationError.errors)
+        return NextResponse.json(
+          { 
+            error: 'Validation error', 
+            details: validationError.errors,
+            receivedData: body
+          },
+          { status: 400 }
+        )
+      }
+      throw validationError
+    }
+    
     const validatedData = createServiceSchema.parse(body)
 
     // Check if the scheduled date is in the future
@@ -166,16 +209,24 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if email fails
     }
 
+    console.log('✅ Service created successfully:', {
+      serviceId: service.id,
+      type: service.type,
+      scheduledDate: service.scheduledDate
+    })
+    
     return NextResponse.json({ service }, { status: 201 })
   } catch (error) {
+    console.error('🚨 Service creation error:', error)
+    
     if (error instanceof z.ZodError) {
+      console.log('🔍 Zod validation error details:', error.errors)
       return NextResponse.json(
         { error: 'Validation error', details: error.errors },
         { status: 400 }
       )
     }
 
-    console.error('Error creating service:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
