@@ -43,14 +43,15 @@ interface Service {
   status: ServiceStatus
   priority: Priority
   scheduledDate: Date
+  completedDate: Date | null
   price: number
   estimatedHours: number
   actualHours: number | null
+  assignedTo: string | null
   partsUsed: string[]
-  notes: string | null
-  completionNotes: string | null
   deviceInfo: any
-  issueDetails: any
+  issueDetails: string | null
+  resolution: string | null
   createdAt: Date
   updatedAt: Date
   user: {
