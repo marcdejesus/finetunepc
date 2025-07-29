@@ -1,8 +1,10 @@
 from datetime import datetime
 from typing import Optional
+from uuid import uuid4
 from sqlalchemy import String, Text, Boolean, DateTime, ForeignKey, Index, Integer, DECIMAL
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
 from decimal import Decimal
 from app.core.database import Base
 
@@ -106,49 +108,54 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         Index("idx_products_category_id", "category_id"),
-        Index("idx_products_sku", "sku"),
-        Index("idx_products_price", "price"),
+        Index("idx_products_slug", "slug"),
+        Index("idx_products_brand", "brand"),
         Index("idx_products_is_active", "is_active"),
+        Index("idx_products_deleted_at", "deleted_at"),
         Index("idx_products_created_at", "created_at"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
     name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     slug: Mapped[str] = mapped_column(String(275), unique=True, index=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     short_description: Mapped[Optional[str]] = mapped_column(String(500))
     
-    # Pricing
-    price: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
-    compare_at_price: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(10, 2))
-    cost_price: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(10, 2))
+    # Base pricing (variants can override)
+    base_price: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
     
-    # Inventory
-    stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
-    track_inventory: Mapped[bool] = mapped_column(Boolean, default=True)
-    allow_backorder: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Product identification
+    sku_prefix: Mapped[Optional[str]] = mapped_column(String(20))  # e.g., "TSHIRT"
+    brand: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    
+    # Physical attributes
+    weight: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8, 3))  # in kg
+    length: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8, 2))  # in cm
+    width: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8, 2))   # in cm
+    height: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8, 2))  # in cm
     
     # Product details
     category_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("categories.id")
     )
-    sku: Mapped[Optional[str]] = mapped_column(String(100), unique=True, index=True)
-    barcode: Mapped[Optional[str]] = mapped_column(String(100))
-    weight: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8, 3))
-    dimensions: Mapped[Optional[str]] = mapped_column(String(100))  # LxWxH
     
     # Product status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
     is_digital: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_shipping: Mapped[bool] = mapped_column(Boolean, default=True)
     
     # SEO fields
     meta_title: Mapped[Optional[str]] = mapped_column(String(200))
     meta_description: Mapped[Optional[str]] = mapped_column(String(500))
+    search_keywords: Mapped[Optional[str]] = mapped_column(Text)
     
-    # Media
-    image_url: Mapped[Optional[str]] = mapped_column(String(500))
-    gallery_images: Mapped[Optional[str]] = mapped_column(Text)  # JSON array of URLs
+    # Soft delete support
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
     
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -162,36 +169,71 @@ class Product(Base):
     category: Mapped[Optional["Category"]] = relationship(
         "Category", back_populates="products"
     )
+    variants: Mapped[list["ProductVariant"]] = relationship(
+        "ProductVariant", back_populates="product", cascade="all, delete-orphan"
+    )
+    images: Mapped[list["ProductImage"]] = relationship(
+        "ProductImage", back_populates="product", cascade="all, delete-orphan"
+    )
     order_items = relationship("OrderItem", back_populates="product")
 
     def __repr__(self) -> str:
-        return f"<Product(id={self.id}, name={self.name}, price={self.price})>"
+        return f"<Product(id={self.id}, name={self.name}, slug={self.slug})>"
 
     @property
-    def is_in_stock(self) -> bool:
-        """Check if the product is in stock."""
-        if not self.track_inventory:
-            return True
-        return self.stock_quantity > 0 or self.allow_backorder
+    def is_deleted(self) -> bool:
+        """Check if the product is soft deleted."""
+        return self.deleted_at is not None
 
     @property
-    def is_on_sale(self) -> bool:
-        """Check if the product is on sale."""
-        return (
-            self.compare_at_price is not None and 
-            self.compare_at_price > self.price
-        )
-
-    @property
-    def discount_amount(self) -> Optional[Decimal]:
-        """Calculate the discount amount if on sale."""
-        if self.is_on_sale:
-            return self.compare_at_price - self.price
+    def dimensions_str(self) -> Optional[str]:
+        """Return dimensions as formatted string."""
+        if all([self.length, self.width, self.height]):
+            return f"{self.length} x {self.width} x {self.height} cm"
         return None
 
     @property
-    def discount_percentage(self) -> Optional[Decimal]:
-        """Calculate the discount percentage if on sale."""
-        if self.is_on_sale and self.compare_at_price:
-            return ((self.compare_at_price - self.price) / self.compare_at_price) * 100
+    def has_variants(self) -> bool:
+        """Check if product has variants."""
+        return len(self.variants) > 0
+
+    @property
+    def default_variant(self) -> Optional["ProductVariant"]:
+        """Get the default variant or first active variant."""
+        if not self.variants:
+            return None
+        
+        # Look for default variant first
+        for variant in self.variants:
+            if variant.is_default and variant.is_active:
+                return variant
+        
+        # Fall back to first active variant
+        for variant in self.variants:
+            if variant.is_active:
+                return variant
+        
         return None
+
+    @property
+    def price_range(self) -> tuple[Decimal, Decimal]:
+        """Get min and max price from all active variants."""
+        if not self.variants:
+            return self.base_price, self.base_price
+        
+        active_variants = [v for v in self.variants if v.is_active]
+        if not active_variants:
+            return self.base_price, self.base_price
+        
+        prices = [v.current_price for v in active_variants]
+        return min(prices), max(prices)
+
+    def soft_delete(self) -> None:
+        """Soft delete the product."""
+        self.deleted_at = datetime.utcnow()
+        self.is_active = False
+
+    def restore(self) -> None:
+        """Restore a soft deleted product."""
+        self.deleted_at = None
+        self.is_active = True

@@ -87,9 +87,9 @@ class CartItem(Base):
     __tablename__ = "cart_items"
     __table_args__ = (
         Index("idx_cart_items_cart_id", "cart_id"),
-        Index("idx_cart_items_product_id", "product_id"),
-        # Ensure one item per product per cart
-        UniqueConstraint("cart_id", "product_id", name="uq_cart_item_cart_product"),
+        Index("idx_cart_items_variant_id", "variant_id"),
+        # Ensure one item per variant per cart
+        UniqueConstraint("cart_id", "variant_id", name="uq_cart_item_cart_variant"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -98,17 +98,18 @@ class CartItem(Base):
     cart_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("carts.id"), nullable=False
     )
-    product_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("products.id"), nullable=False
+    variant_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("product_variants.id"), nullable=False
     )
     
     # Item details
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     unit_price: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
     
-    # Product snapshot (to preserve data if product changes)
+    # Product/Variant snapshot (to preserve data if product changes)
     product_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    product_sku: Mapped[Optional[str]] = mapped_column(String(100))
+    variant_title: Mapped[Optional[str]] = mapped_column(String(255))
+    variant_sku: Mapped[str] = mapped_column(String(100), nullable=False)
     
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -120,7 +121,7 @@ class CartItem(Base):
 
     # Relationships
     cart: Mapped["Cart"] = relationship("Cart", back_populates="items")
-    product: Mapped["Product"] = relationship("Product")
+    variant: Mapped["ProductVariant"] = relationship("ProductVariant")
 
     def __repr__(self) -> str:
         return f"<CartItem(id={self.id}, product={self.product_name}, qty={self.quantity})>"
@@ -130,8 +131,9 @@ class CartItem(Base):
         """Calculate the subtotal for this cart item."""
         return self.unit_price * self.quantity
 
-    def update_from_product(self, product: "Product") -> None:
-        """Update cart item details from the current product."""
-        self.unit_price = product.price
-        self.product_name = product.name
-        self.product_sku = product.sku
+    def update_from_variant(self, variant: "ProductVariant") -> None:
+        """Update cart item details from the current variant."""
+        self.unit_price = variant.current_price
+        self.product_name = variant.product.name
+        self.variant_title = variant.title
+        self.variant_sku = variant.sku
