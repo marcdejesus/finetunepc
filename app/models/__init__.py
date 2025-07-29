@@ -6,7 +6,11 @@ from .product import Product, Category
 from .product_variant import ProductVariant
 from .product_image import ProductImage, ImageType
 from .inventory import Inventory, StockMovement, StockReservation, StockMovementType
+from .coupon import Coupon, CouponType
 from .order import Order, OrderItem, OrderStatus
+from .payment import Payment, PaymentStatus, PaymentMethod
+from .refund import Refund, RefundStatus, RefundReason
+from .shipment import Shipment, ShipmentItem, ShipmentStatus, ShippingCarrier
 
 __all__ = [
     "User", 
@@ -24,7 +28,19 @@ __all__ = [
     "StockMovement", 
     "StockReservation",
     "StockMovementType",
+    "Coupon",
+    "CouponType",
     "Order", 
     "OrderItem", 
-    "OrderStatus"
+    "OrderStatus",
+    "Payment",
+    "PaymentStatus",
+    "PaymentMethod",
+    "Refund",
+    "RefundStatus",
+    "RefundReason",
+    "Shipment",
+    "ShipmentItem",
+    "ShipmentStatus",
+    "ShippingCarrier"
 ]
