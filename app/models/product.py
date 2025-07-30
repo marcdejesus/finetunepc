@@ -175,7 +175,6 @@ class Product(Base):
     images: Mapped[list["ProductImage"]] = relationship(
         "ProductImage", back_populates="product", cascade="all, delete-orphan"
     )
-    order_items = relationship("OrderItem", back_populates="product")
 
     def __repr__(self) -> str:
         return f"<Product(id={self.id}, name={self.name}, slug={self.slug})>"

@@ -1,0 +1,33 @@
+[run]
+source = app
+omit = 
+    */tests/*
+    */venv/*
+    */env/*
+    */__pycache__/*
+    */migrations/*
+    */alembic/*
+    app/main.py
+    app/core/settings.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @overload
+
+show_missing = True
+precision = 2
+fail_under = 80
+
+[html]
+directory = htmlcov
+title = E-commerce Backend Test Coverage
+
+[xml]
+output = coverage.xml

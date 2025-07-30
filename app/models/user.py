@@ -55,3 +55,20 @@ class User(Base):
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email})>"
+    
+    @property
+    def full_name(self) -> str:
+        """Get user's full name."""
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        elif self.first_name:
+            return self.first_name
+        elif self.last_name:
+            return self.last_name
+        else:
+            return self.email.split('@')[0]
+    
+    @property
+    def is_deleted(self) -> bool:
+        """Check if the user is soft deleted."""
+        return self.deleted_at is not None
