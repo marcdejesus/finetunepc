@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 from app.models.order import OrderStatus
-from app.schemas.product import Product
+from app.schemas.product import ProductResponse
 
 
 class OrderItemBase(BaseModel):
@@ -21,7 +21,7 @@ class OrderItem(OrderItemBase):
     
     id: int
     order_id: int
-    product: Optional[Product] = None
+    product: Optional[ProductResponse] = None
 
 
 class OrderBase(BaseModel):

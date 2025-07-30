@@ -147,6 +147,13 @@ class Product(Base):
     is_digital: Mapped[bool] = mapped_column(Boolean, default=False)
     requires_shipping: Mapped[bool] = mapped_column(Boolean, default=True)
     
+    # Performance metrics
+    popularity_score: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8, 2), default=0)
+    rating_average: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(3, 2), default=0)
+    rating_count: Mapped[int] = mapped_column(Integer, default=0)
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    sales_count: Mapped[int] = mapped_column(Integer, default=0)
+    
     # SEO fields
     meta_title: Mapped[Optional[str]] = mapped_column(String(200))
     meta_description: Mapped[Optional[str]] = mapped_column(String(500))
