@@ -1,7 +1,7 @@
 from .user import User, UserCreate, UserUpdate, UserInDB
 from .product import Product, ProductCreate, ProductUpdate, Category, CategoryCreate, CategoryUpdate
 from .order import Order, OrderCreate, OrderUpdate, OrderItem, OrderItemCreate
-from .auth import Token, TokenData, UserLogin
+from .auth import TokenPair, UserLoginRequest, UserLoginResponse, UserRegisterRequest, UserRegisterResponse
 
 __all__ = [
     "User", "UserCreate", "UserUpdate", "UserInDB",
@@ -9,5 +9,5 @@ __all__ = [
     "Category", "CategoryCreate", "CategoryUpdate",
     "Order", "OrderCreate", "OrderUpdate",
     "OrderItem", "OrderItemCreate",
-    "Token", "TokenData", "UserLogin"
+    "TokenPair", "UserLoginRequest", "UserLoginResponse", "UserRegisterRequest", "UserRegisterResponse"
 ]

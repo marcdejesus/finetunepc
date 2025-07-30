@@ -1,6 +1,7 @@
 from .user import User
 from .user_session import UserSession
 from .address import Address, AddressType
+from .audit_log import AuditLog
 from .cart import Cart, CartItem
 from .product import Product, Category
 from .product_variant import ProductVariant
@@ -17,6 +18,7 @@ __all__ = [
     "UserSession",
     "Address", 
     "AddressType",
+    "AuditLog",
     "Cart", 
     "CartItem",
     "Product", 

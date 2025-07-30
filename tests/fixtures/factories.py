@@ -9,7 +9,7 @@ from uuid import uuid4
 from app.models import (
     User, UserSession, Address, Category, Product, ProductVariant,
     ProductImage, Inventory, Cart, CartItem, Order, OrderItem,
-    Payment, Refund, Shipment, Coupon
+    Payment, Refund, Shipment, Coupon, AuditLog
 )
 from app.core.security import PasswordManager
 
@@ -88,6 +88,9 @@ class AddressFactory(factory.Factory):
     country = "US"
     phone_number = factory.Faker("phone_number")
     is_default = False
+    is_verified = False
+    latitude = None
+    longitude = None
     created_at = factory.LazyFunction(datetime.utcnow)
     updated_at = factory.LazyFunction(datetime.utcnow)
 
@@ -424,3 +427,21 @@ class FactoryHelper:
         ShipmentFactory(order_id=order.id)
         
         return order
+
+
+class AuditLogFactory(factory.Factory):
+    """Factory for creating AuditLog instances."""
+    
+    class Meta:
+        model = AuditLog
+    
+    id = factory.LazyFunction(lambda: str(uuid4()))
+    user_id = factory.SubFactory(UserFactory)
+    action = factory.Faker("word")
+    resource_type = factory.Faker("word")
+    resource_id = factory.LazyFunction(lambda: str(uuid4()))
+    old_values = factory.LazyFunction(lambda: {"field1": "old_value"})
+    new_values = factory.LazyFunction(lambda: {"field1": "new_value"})
+    timestamp = factory.LazyFunction(datetime.utcnow)
+    ip_address = factory.Faker("ipv4")
+    user_agent = factory.Faker("user_agent")
